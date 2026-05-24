@@ -1,0 +1,70 @@
+name: Build Project and Run Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    paths:
+      - "src/**"
+      - "public/**"
+      - "index.html"
+      - "vite.config*"
+      - "tsconfig*.json"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/build.yml"
+
+env:
+  CARGO_TERM_COLOR: always
+  PKG_CONFIG_PATH: /usr/lib/pkgconfig
+  PUBLIC_STELLAR_NETWORK: local
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/cache@v5
+        id: cargo-cache
+        with:
+          path: |
+            ~/.cargo/bin/
+            runner/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Log cache status
+        run: echo "Cargo cache hit:" ${{ steps.cargo-cache.outputs.cache-hit }}
+      - run: rustup target add wasm32v1-none
+      - run: sudo apt-get update && sudo apt-get install -y libudev-dev libdbus-1-dev pkg-config
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+      - name: Install stellar-scaffold-cli
+        run: |
+          if ! command -v stellar-scaffold &> /dev/null; then
+            cargo binstall stellar-scaffold-cli
+          else
+            echo "stellar-scaffold already installed."
+          fi
+      - run: npm ci --legacy-peer-deps
+      - name: Ensure Rollup Linux Native Binary
+        run: |
+          node -e "require.resolve('@rollup/rollup-linux-x64-gnu')" || npm install --no-save --legacy-peer-deps @rollup/rollup-linux-x64-gnu
+      - name: Pull stellar-quickstart image
+        run: docker pull stellar/quickstart:testing
+      - name: Security audit
+        # --audit-level=critical: the one remaining high is xlsx (SheetJS, no upstream fix).
+        # All critical vulnerabilities have been resolved via package.json overrides.
+        run: npm audit --audit-level=critical
+      - run: npm run lint
+      - name: Check formatting
+        run: npx prettier . --check --ignore-unknown
+      - run: npm run build
+      - name: Run tests
+        run: npm test --if-present
