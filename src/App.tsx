@@ -13,10 +13,10 @@ import KeyboardShortcutsModal from "./components/KeyboardShortcutsModal";
 
 const Home = lazy(() => import("./pages/Home"));
 const About = lazy(() => import("./pages/About"));
-const Debugger = lazy(() => import("./pages/Debugger"));
+const Debugger = lazy(() => import("./pages/DebuggerStub"));
 const HelpPage = lazy(() => import("./pages/HelpPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
-const UIPrimitivesPreview = lazy(() => import("./pages/UIPrimitivesPreview"));
+const UIPrimitivesPreview = lazy(() => import("./pages/StellarOnlyStub"));
 
 // Dashboard pages
 const EmployerDashboard = lazy(() => import("./pages/EmployerDashboard"));
@@ -25,7 +25,7 @@ const TreasuryManager = lazy(() => import("./pages/TreasuryManager"));
 const TreasuryAnalytics = lazy(() => import("./pages/TreasuryAnalytics"));
 const WithdrawPage = lazy(() => import("./pages/WithdrawPage"));
 const CreateStream = lazy(() => import("./pages/CreateStream"));
-const GovernanceOverview = lazy(() => import("./pages/GovernanceOverview"));
+const GovernanceOverview = lazy(() => import("./pages/StellarOnlyStub"));
 const Reports = lazy(() => import("./pages/Reports"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 const Settings = lazy(() => import("./pages/Settings"));
@@ -37,7 +37,7 @@ const DashboardCustomization = lazy(
   () => import("./pages/DashboardCustomization"),
 );
 const StreamTemplates = lazy(() => import("./pages/StreamTemplates"));
-const StreamComparison = lazy(() => import("./pages/StreamComparison"));
+const StreamComparison = lazy(() => import("./pages/StellarOnlyStub"));
 const EmployerOnboarding = lazy(() => import("./pages/EmployerOnboarding"));
 
 // ─── Public layout (landing page + help) ─────────────────────────────────────

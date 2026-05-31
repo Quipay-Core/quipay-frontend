@@ -25,7 +25,7 @@ import { wallet } from "../util/wallet";
 import { networkPassphrase } from "../contracts/util";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
-const STROOPS_PER_UNIT = 1e7;
+const USDC_DECIMALS = 1e6; // ARC USDC 6 decimals
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -168,7 +168,7 @@ export function useWorkforceRegistry(employerAddress: string | undefined) {
               .filter((s) => s.status === "completed")
               .reduce(
                 (sum, s) =>
-                  sum + parseFloat(s.withdrawn_amount) / STROOPS_PER_UNIT,
+                  sum + parseFloat(s.withdrawn_amount) / USDC_DECIMALS,
                 0,
               );
             return {

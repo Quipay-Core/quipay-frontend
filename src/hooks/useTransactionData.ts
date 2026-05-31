@@ -17,8 +17,8 @@ import { getCache, setCache } from "../services/offlineService";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
-/** Stellar amounts are stored in stroops (1 XLM = 10,000,000 stroops). */
-const STROOPS_PER_UNIT = 1e7;
+/** ARC USDC amounts use 6 decimal places (1 USDC = 1_000_000 units). */
+const USDC_DECIMALS = 1e6; // ARC USDC: 6 decimals
 
 /* ------------------------------------------------------------------ */
 /*  Backend response shape                                            */
@@ -58,7 +58,7 @@ function mapStreamToTransaction(s: StreamApiRecord): PayrollTransaction {
     employeeName: shortWorker,
     employeeId: workerId,
     walletAddress: s.worker,
-    amount: parseFloat(s.total_amount) / STROOPS_PER_UNIT,
+    amount: parseFloat(s.total_amount) / USDC_DECIMALS,
     currency: "XLM",
     txHash: String(s.ledger_created).padStart(64, "0"),
     status: statusMap[s.status] ?? "pending",

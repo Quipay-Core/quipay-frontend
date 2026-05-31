@@ -1,119 +1,68 @@
-import storage from "./storage";
-import {
-  ISupportedWallet,
-  StellarWalletsKit,
-  WalletNetwork,
-  sep43Modules,
-} from "@creit.tech/stellar-wallets-kit";
-import { Horizon } from "@stellar/stellar-sdk";
-import { networkPassphrase, stellarNetwork } from "../contracts/util";
+/**
+ * wallet.ts — EVM wallet utilities for ARC.
+ *
+ * Replaces the Stellar/stellar-wallets-kit layer with viem + wagmi equivalents.
+ *
+ * MappedBalances keeps the same surface so WalletProvider and all consumers
+ * compile without changes. The USDC balance replaces the old XLM/Stellar balance.
+ */
 
-const kit: StellarWalletsKit = new StellarWalletsKit({
-  network: networkPassphrase as WalletNetwork,
-  modules: sep43Modules(),
-});
+import { createPublicClient, http, erc20Abi, type Address } from "viem";
+import { arcTestnet, ARC_USDC_ADDRESS, formatUsdc } from "../contracts/util";
 
-export const connectWallet = async () => {
-  await kit.openModal({
-    modalTitle: "Connect to your wallet",
-    onWalletSelected: (option: ISupportedWallet) => {
-      const selectedId = option.id;
-      kit.setWallet(selectedId);
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-      // Now open selected wallet's login flow by calling `getAddress` --
-      // Yes, it's strange that a getter has a side effect of opening a modal
-      void kit.getAddress().then((address) => {
-        // Once `getAddress` returns successfully, we know they actually
-        // connected the selected wallet, and we set our localStorage
-        if (address.address) {
-          storage.setItem("walletId", selectedId);
-          storage.setItem("walletAddress", address.address);
-        } else {
-          storage.setItem("walletId", "");
-          storage.setItem("walletAddress", "");
-        }
-      });
-      if (selectedId == "freighter" || selectedId == "hot-wallet") {
-        void kit.getNetwork().then((network) => {
-          if (network.network && network.networkPassphrase) {
-            storage.setItem("walletNetwork", network.network);
-            storage.setItem("networkPassphrase", network.networkPassphrase);
-          } else {
-            storage.setItem("walletNetwork", "");
-            storage.setItem("networkPassphrase", "");
-          }
-        });
-      }
-    },
-  });
-};
+/**
+ * Matches the old Horizon.HorizonApi.BalanceLine shape just enough
+ * for existing consumers to work. Key is the asset code (e.g. "USDC").
+ */
+export type MappedBalances = Record<string, { balance: string; assetCode: string }>;
 
-export const disconnectWallet = async () => {
+// ─── Balance fetching ─────────────────────────────────────────────────────────
+
+/**
+ * Fetch the USDC ERC-20 balance for an EVM address.
+ * Returns MappedBalances with a "USDC" key for existing consumer compatibility.
+ */
+export async function fetchBalances(address: string): Promise<MappedBalances> {
+  if (!address || !address.startsWith("0x")) return {};
   try {
-    await kit.disconnect();
-  } catch (error) {
-    // Log error but continue with cleanup
-    console.warn("Wallet disconnect error:", error);
-  }
-
-  // Clear all wallet-related storage
-  storage.removeItem("walletId");
-  storage.removeItem("walletAddress");
-  storage.removeItem("walletNetwork");
-  storage.removeItem("networkPassphrase");
-
-  // Reset wallet kit state
-  kit.setWallet("");
-};
-
-function getHorizonHost(mode: string) {
-  switch (mode) {
-    case "LOCAL":
-      return "http://localhost:8000";
-    case "FUTURENET":
-      return "https://horizon-futurenet.stellar.org";
-    case "TESTNET":
-      return "https://horizon-testnet.stellar.org";
-    case "PUBLIC":
-      return "https://horizon.stellar.org";
-    default:
-      throw new Error(`Unknown Stellar network: ${mode}`);
+    const client = createPublicClient({
+      chain: arcTestnet,
+      transport: http(),
+    });
+    const raw = await client.readContract({
+      address: ARC_USDC_ADDRESS as Address,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [address as Address],
+    });
+    const display = formatUsdc(raw as bigint);
+    return { USDC: { balance: display, assetCode: "USDC" } };
+  } catch {
+    return {};
   }
 }
 
-const horizon = new Horizon.Server(getHorizonHost(stellarNetwork), {
-  allowHttp: stellarNetwork === "LOCAL",
-});
+// ─── Wallet connect / disconnect ──────────────────────────────────────────────
+// Actual connect/disconnect is handled by ConnectKit + wagmi hooks in WalletProvider.
+// These are no-ops kept for import compatibility.
 
-const formatter = new Intl.NumberFormat();
-
-export type MappedBalances = Record<string, Horizon.HorizonApi.BalanceLine>;
-
-export const fetchBalances = async (address: string) => {
-  try {
-    const { balances } = await horizon.accounts().accountId(address).call();
-    const mapped = balances.reduce((acc, b) => {
-      b.balance = formatter.format(Number(b.balance));
-      const key =
-        b.asset_type === "native"
-          ? "xlm"
-          : b.asset_type === "liquidity_pool_shares"
-            ? b.liquidity_pool_id
-            : `${b.asset_code}:${b.asset_issuer}`;
-      acc[key] = b;
-      return acc;
-    }, {} as MappedBalances);
-    return mapped;
-  } catch (err) {
-    // `not found` is sort of expected, indicating an unfunded wallet, which
-    // the consumer of `balances` can understand via the lack of `xlm` key.
-    // If the error does NOT match 'not found', log the error.
-    // We should also possibly not return `{}` in this case?
-    if (!(err instanceof Error && err.message.match(/not found/i))) {
-      console.error(err);
-    }
-    return {};
-  }
+export const connectWallet = async (): Promise<void> => {
+  // ConnectKit's <ConnectKitButton /> handles this via the wagmi connector.
+  console.warn("connectWallet(): use ConnectKitButton or wagmi useConnect instead");
 };
 
-export const wallet = kit;
+export const disconnectWallet = async (): Promise<void> => {
+  // Call wagmi's disconnect() from useDisconnect hook in components.
+  console.warn("disconnectWallet(): use wagmi useDisconnect instead");
+};
+
+// ─── Stub kept for WalletProvider ────────────────────────────────────────────
+// WalletProvider calls wallet.signTransaction. On EVM this is handled by
+// wagmi's useWalletClient / writeContract. This stub prevents a crash.
+export const wallet = {
+  signTransaction: async (_xdr: string, _opts?: unknown): Promise<{ signedTxXdr: string }> =>  {
+    throw new Error("signTransaction: use wagmi useWalletClient or writeContract instead");
+  },
+};

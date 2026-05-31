@@ -10,7 +10,7 @@ import { getCache, setCache } from "../services/offlineService";
 
 /**
  * Normalised view of a single on-chain payroll stream for a worker.
- * All monetary values are in token units (not stroops).
+ * All monetary values are in USDC units (6 decimal places, not Stellar stroops).
  */
 export interface WorkerStream {
   /** On-chain stream ID (stringified `u64`). */
@@ -57,8 +57,8 @@ export interface WithdrawalRecord {
   txHash: string;
 }
 
-/** Stellar uses 7 decimal places (10^7 stroops = 1 token unit). */
-const STROOPS_PER_UNIT = 1e7;
+/** ARC USDC uses 6 decimal places (1 USDC = 1_000_000 units). */
+const USDC_DECIMALS = 1e6; // ARC USDC: 6 decimals, NOT 7 like Stellar stroops
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, "");
 const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ?? "";
@@ -155,15 +155,15 @@ export const useStreams = (workerAddress: string | undefined) => {
 
         const workerStreams: WorkerStream[] = await Promise.all(
           streamIds
-            .map((id, i) => ({
+            .map((id: bigint, i: number) => ({
               id,
               stream: streamResults[i],
             }))
             .filter(
-              (x): x is { id: bigint; stream: ContractStream } =>
+              (x: { id: bigint; stream: ContractStream | null }): x is { id: bigint; stream: ContractStream } =>
                 x.stream !== null,
             )
-            .map(async ({ id, stream: s }) => {
+            .map(async ({ id, stream: s }: { id: bigint; stream: ContractStream }) => {
               const streamId = id.toString();
               const tokenSymbol = await getTokenSymbol(workerAddress, s.token);
               const isCompleted = s.status === 2;
@@ -173,13 +173,13 @@ export const useStreams = (workerAddress: string | undefined) => {
                 id: streamId,
                 employerName,
                 employerAddress: s.employer,
-                flowRate: Number(s.rate) / STROOPS_PER_UNIT,
+                flowRate: Number(s.rate) / USDC_DECIMALS,
                 tokenSymbol,
                 startTime: Number(s.start_ts),
                 endTime: Number(s.end_ts),
                 cliffTime: Number(s.cliff_ts),
-                totalAmount: Number(s.total_amount) / STROOPS_PER_UNIT,
-                claimedAmount: Number(s.withdrawn_amount) / STROOPS_PER_UNIT,
+                totalAmount: Number(s.total_amount) / USDC_DECIMALS,
+                claimedAmount: Number(s.withdrawn_amount) / USDC_DECIMALS,
                 status: s.status,
                 proofCid: proof?.cid,
                 proofGatewayUrl: proof?.gatewayUrl,
@@ -193,11 +193,11 @@ export const useStreams = (workerAddress: string | undefined) => {
 
         const history: WithdrawalRecord[] = await Promise.all(
           events.map(async (ev) => {
-            const tokenSymbol = await getTokenSymbol(workerAddress, ev.token);
+            const tokenSymbol = await getTokenSymbol(workerAddress, ev.token as `0x${string}`);
             return {
               id: ev.txHash,
               streamId: ev.streamId.toString(),
-              amount: (Number(ev.amount) / STROOPS_PER_UNIT).toFixed(7),
+              amount: (Number(ev.amount) / USDC_DECIMALS).toFixed(7),
               tokenSymbol,
               date: new Date(ev.ledgerClosedAt).toLocaleString(),
               txHash: ev.txHash,

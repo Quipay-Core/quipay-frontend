@@ -83,7 +83,7 @@ export function useRoleDetect(address: string | undefined) {
     ])
       .then(([isWorker, employerPage]) => {
         const hasStreams =
-          employerPage.total > 0 || employerPage.streams.length > 0;
+          ((employerPage as any)?.total || 0) > 0 || ((employerPage as any)?.streams?.length || 0) > 0;
 
         let detected: UserRole;
         if (isWorker) detected = "worker";

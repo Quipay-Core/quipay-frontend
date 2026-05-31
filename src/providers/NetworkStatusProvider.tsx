@@ -14,6 +14,8 @@ import {
 } from "../util/networkStatus";
 
 export interface NetworkStatusContextType extends NetworkStatus {
+  ledgerSequence?: number;
+  protocolVersion?: number;
   refresh: () => Promise<void>;
   /** Rolling history of status snapshots for the health monitor chart */
   history: NetworkStatus[];

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useWallet } from "../hooks/useWallet";
 import { useStreams } from "../hooks/useStreams";
 import { SeoHelmet } from "../components/seo/SeoHelmet";

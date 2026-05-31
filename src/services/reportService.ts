@@ -549,9 +549,9 @@ export async function exportOnChainReceiptPDF(
     amount: amountToDisplayUnits(receipt.total_paid),
     currency: tokenSymbol,
     txHash: `receipt:${receipt.receipt_id.toString()}`,
-    status: receipt.status === 0 ? "completed" : "failed",
+    status: receipt.status === 'completed' ? "completed" : "failed",
     description:
-      receipt.status === 0
+      receipt.status === 'completed'
         ? `On-chain payroll receipt for completed stream #${receipt.stream_id.toString()}`
         : `On-chain payroll receipt for cancelled stream #${receipt.stream_id.toString()}`,
   };

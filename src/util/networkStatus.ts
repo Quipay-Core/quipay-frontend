@@ -1,154 +1,90 @@
-import { horizonUrl, rpcUrl } from "../contracts/util";
+/**
+ * networkStatus.ts — ARC network health monitoring.
+ * Replaces the Stellar Horizon-based version.
+ * Keeps the same NetworkStatus shape so NetworkStatusProvider compiles unchanged.
+ */
 
-export type HorizonStatus = "online" | "degraded" | "offline";
-export type CongestionLevel = "low" | "medium" | "high";
+import { createPublicClient, http } from "viem";
+import { arcTestnet } from "../contracts/util";
 
+/** Matches the original RpcNodeHealth shape used by NetworkStatusProvider. */
 export interface RpcNodeHealth {
   name: string;
   url: string;
-  status: HorizonStatus;
+  status: "online" | "degraded" | "offline";
   latency: number;
   lastChecked: number;
-  error?: string;
 }
 
+/** Compatible with the original NetworkStatus shape in NetworkStatusProvider. */
 export interface NetworkStatus {
-  status: HorizonStatus;
+  status: "online" | "degraded" | "offline";
   latency: number;
-  congestion: CongestionLevel;
+  congestion: "low" | "medium" | "high";
   minFee: number;
   horizonHealth: RpcNodeHealth;
   sorobanHealth: RpcNodeHealth;
-  ledgerSequence?: number;
-  protocolVersion?: number;
+  // ARC-specific extras
+  healthy?: boolean;
+  blockNumber?: bigint;
+  latencyMs?: number;
+  error?: string;
 }
 
-async function checkNodeHealth(
-  name: string,
-  url: string,
-  useJsonRpc: boolean = false,
-): Promise<RpcNodeHealth> {
+const defaultNodeHealth = (url: string): RpcNodeHealth => ({
+  name: "ARC Testnet RPC",
+  url,
+  status: "online",
+  latency: 0,
+  lastChecked: Date.now(),
+});
+
+export async function getNetworkStatus(): Promise<NetworkStatus> {
+  const rpcUrl = arcTestnet.rpcUrls.default.http[0];
   const start = Date.now();
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-
-    // Soroban RPC doesn't expose a GET /health — use the JSON-RPC getHealth method.
-    const response = useJsonRpc
-      ? await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getHealth" }),
-          signal: controller.signal,
-        })
-      : await fetch(url, { signal: controller.signal });
-
-    clearTimeout(timeout);
-    const latency = Date.now() - start;
-
-    if (!response.ok) {
-      return {
-        name,
-        url,
-        status: "offline",
-        latency,
-        lastChecked: Date.now(),
-        error: `HTTP ${response.status}: ${response.statusText}`,
-      };
-    }
-
-    return {
-      name,
-      url,
-      status: latency > 2000 ? "degraded" : "online",
-      latency,
+    const client = createPublicClient({ chain: arcTestnet, transport: http() });
+    const block = await client.getBlockNumber();
+    const latencyMs = Date.now() - start;
+    const nodeHealth: RpcNodeHealth = {
+      name: "ARC Testnet RPC",
+      url: rpcUrl,
+      status: "online",
+      latency: latencyMs,
       lastChecked: Date.now(),
     };
-  } catch (error) {
     return {
-      name,
-      url,
-      status: "offline",
-      latency: Date.now() - start,
-      lastChecked: Date.now(),
-      error: error instanceof Error ? error.message : "Connection failed",
+      status: "online",
+      latency: latencyMs,
+      congestion: "low",
+      minFee: 0, // USDC gas on ARC is effectively free
+      horizonHealth: nodeHealth,
+      sorobanHealth: nodeHealth,
+      healthy: true,
+      blockNumber: block,
+      latencyMs,
     };
-  }
-}
-
-/**
- * Checks the health of both Horizon and Soroban RPC servers,
- * plus fee stats and congestion.
- */
-export async function getNetworkStatus(): Promise<NetworkStatus> {
-  const startTime = Date.now();
-
-  const [horizonHealth, sorobanHealth] = await Promise.all([
-    checkNodeHealth("Stellar Horizon", horizonUrl, false),
-    checkNodeHealth("Soroban RPC", rpcUrl, true),
-  ]);
-
-  if (
-    horizonHealth.status === "offline" &&
-    sorobanHealth.status === "offline"
-  ) {
+  } catch (e) {
+    const latencyMs = Date.now() - start;
+    const offlineHealth: RpcNodeHealth = {
+      ...defaultNodeHealth(rpcUrl),
+      status: "offline",
+      latency: latencyMs,
+      lastChecked: Date.now(),
+    };
     return {
       status: "offline",
-      latency: Date.now() - startTime,
+      latency: latencyMs,
       congestion: "low",
       minFee: 0,
-      horizonHealth,
-      sorobanHealth,
+      horizonHealth: offlineHealth,
+      sorobanHealth: offlineHealth,
+      healthy: false,
+      error: e instanceof Error ? e.message : "RPC unreachable",
+      latencyMs,
     };
   }
-
-  const overallStatus: HorizonStatus =
-    horizonHealth.status === "offline" || sorobanHealth.status === "offline"
-      ? "degraded"
-      : horizonHealth.status === "degraded" ||
-          sorobanHealth.status === "degraded"
-        ? "degraded"
-        : "online";
-
-  const latency = Math.max(horizonHealth.latency, sorobanHealth.latency);
-
-  let minFee = 100;
-  let congestion: CongestionLevel = "low";
-  let ledgerSequence: number | undefined;
-  let protocolVersion: number | undefined;
-
-  if (horizonHealth.status !== "offline") {
-    try {
-      const [feeResponse, rootResponse] = await Promise.all([
-        fetch(`${horizonUrl}/fee_stats`).catch(() => null),
-        fetch(horizonUrl).catch(() => null),
-      ]);
-
-      if (feeResponse?.ok) {
-        const feeData = await feeResponse.json();
-        minFee = Number(feeData.fee_charged?.min || 100);
-        if (minFee > 500) congestion = "high";
-        else if (minFee > 200) congestion = "medium";
-      }
-
-      if (rootResponse?.ok) {
-        const rootData = await rootResponse.json();
-        ledgerSequence = rootData.history_latest_ledger;
-        protocolVersion = rootData.current_protocol_version;
-      }
-    } catch {
-      // fee/ledger fetch is best-effort
-    }
-  }
-
-  return {
-    status: overallStatus,
-    latency,
-    congestion,
-    minFee,
-    horizonHealth,
-    sorobanHealth,
-    ledgerSequence,
-    protocolVersion,
-  };
 }
+
+// Backwards compat aliases used by NetworkHealthMonitor
+export type HorizonStatus = RpcNodeHealth;

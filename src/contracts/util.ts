@@ -1,78 +1,79 @@
-import { z } from "zod";
-import { WalletNetwork } from "@creit.tech/stellar-wallets-kit";
-import { Network, NetworkType } from "../debug/types/types";
+/**
+ * ARC chain configuration for viem + wagmi.
+ *
+ * Chain ID:  5042002
+ * RPC:       https://rpc.testnet.arc.network
+ * Explorer:  https://testnet.arcscan.app
+ * Gas token: USDC (18 decimals native / 6 decimals ERC-20)
+ */
 
-const envSchema = z.object({
-  PUBLIC_STELLAR_NETWORK: z.enum([
-    "PUBLIC",
-    "FUTURENET",
-    "TESTNET",
-    "LOCAL",
-    "STANDALONE", // deprecated in favor of LOCAL
-  ] as const),
-  PUBLIC_STELLAR_NETWORK_PASSPHRASE: z.nativeEnum(WalletNetwork),
-  PUBLIC_STELLAR_RPC_URL: z.string(),
-  PUBLIC_STELLAR_HORIZON_URL: z.string(),
+import { defineChain } from "viem";
+
+export const arcTestnet = defineChain({
+  id: 5042002,
+  name: "Arc Testnet",
+  nativeCurrency: {
+    name: "USD Coin",
+    symbol: "USDC",
+    decimals: 18,
+  },
+  rpcUrls: {
+    default: { http: ["https://rpc.testnet.arc.network"] },
+  },
+  blockExplorers: {
+    default: {
+      name: "ArcScan",
+      url: "https://testnet.arcscan.app",
+    },
+  },
+  testnet: true,
 });
 
-const parsed = envSchema.safeParse(import.meta.env);
+/**
+ * USDC ERC-20 contract on ARC testnet.
+ * Uses 6 decimals (NOT 18 like the native gas interface).
+ */
+export const ARC_USDC_ADDRESS =
+  "0x3600000000000000000000000000000000000000" as const;
 
-const env: z.infer<typeof envSchema> = parsed.success
-  ? parsed.data
-  : {
-      PUBLIC_STELLAR_NETWORK: "LOCAL",
-      PUBLIC_STELLAR_NETWORK_PASSPHRASE: WalletNetwork.STANDALONE,
-      PUBLIC_STELLAR_RPC_URL: "http://localhost:8000/rpc",
-      PUBLIC_STELLAR_HORIZON_URL: "http://localhost:8000",
-    };
+/**
+ * USDC decimal places for the ERC-20 interface.
+ * 6 — same as Circle USDC on all EVM chains.
+ * NOT 7 like Stellar stroops.
+ */
+export const USDC_DECIMALS = 6;
 
-export const stellarNetwork =
-  env.PUBLIC_STELLAR_NETWORK === "STANDALONE"
-    ? "LOCAL"
-    : env.PUBLIC_STELLAR_NETWORK;
-export const networkPassphrase = env.PUBLIC_STELLAR_NETWORK_PASSPHRASE;
+/** Convert a raw 6-decimal USDC bigint to a display string. */
+export function formatUsdc(amount: bigint, dp = 2): string {
+  const divisor = 10n ** BigInt(USDC_DECIMALS);
+  const whole = amount / divisor;
+  const frac = (amount % divisor).toString().padStart(USDC_DECIMALS, "0").slice(0, dp);
+  return `${whole}.${frac}`;
+}
 
-const stellarEncode = (str: string) => {
-  return str.replace(/\//g, "//").replace(/;/g, "/;");
+/** Parse a display string like "10.50" into 6-decimal USDC bigint. */
+export function parseUsdc(display: string): bigint {
+  const [whole = "0", frac = ""] = display.replace(/,/g, "").split(".");
+  const fracPadded = frac.padEnd(USDC_DECIMALS, "0").slice(0, USDC_DECIMALS);
+  return BigInt(whole) * 10n ** BigInt(USDC_DECIMALS) + BigInt(fracPadded);
+}
+
+export const rpcUrl = arcTestnet.rpcUrls.default.http[0];
+
+export const network = {
+  id: "arc-testnet" as const,
+  label: "Arc Testnet",
+  chainId: arcTestnet.id,
+  rpcUrl,
+  explorerUrl: arcTestnet.blockExplorers.default.url,
 };
 
-export const labPrefix = () => {
-  switch (stellarNetwork) {
-    case "LOCAL":
-      return `http://localhost:8000/lab/transaction-dashboard?$=network$id=custom&label=Custom&horizonUrl=${stellarEncode(horizonUrl)}&rpcUrl=${stellarEncode(rpcUrl)}&passphrase=${stellarEncode(networkPassphrase)};`;
-    case "PUBLIC":
-      return `https://lab.stellar.org/transaction-dashboard?$=network$id=mainnet&label=Mainnet&horizonUrl=${stellarEncode(horizonUrl)}&rpcUrl=${stellarEncode(rpcUrl)}&passphrase=${stellarEncode(networkPassphrase)};`;
-    case "TESTNET":
-      return `https://lab.stellar.org/transaction-dashboard?$=network$id=testnet&label=Testnet&horizonUrl=${stellarEncode(horizonUrl)}&rpcUrl=${stellarEncode(rpcUrl)}&passphrase=${stellarEncode(networkPassphrase)};`;
-    case "FUTURENET":
-      return `https://lab.stellar.org/transaction-dashboard?$=network$id=futurenet&label=Futurenet&horizonUrl=${stellarEncode(horizonUrl)}&rpcUrl=${stellarEncode(rpcUrl)}&passphrase=${stellarEncode(networkPassphrase)};`;
-    default:
-      return `https://lab.stellar.org/transaction-dashboard?$=network$id=testnet&label=Testnet&horizonUrl=${stellarEncode(horizonUrl)}&rpcUrl=${stellarEncode(rpcUrl)}&passphrase=${stellarEncode(networkPassphrase)};`;
-  }
-};
+// Backwards compat: old code imports networkPassphrase from here
+export const networkPassphrase = String(arcTestnet.id);
 
-// NOTE: needs to be exported for contract files in this directory
-export const rpcUrl = env.PUBLIC_STELLAR_RPC_URL;
+// Backwards compat: old code imported horizonUrl from util
+export const horizonUrl = arcTestnet.blockExplorers.default.url;
 
-export const horizonUrl = env.PUBLIC_STELLAR_HORIZON_URL;
-
-const networkToId = (network: string): NetworkType => {
-  switch (network) {
-    case "PUBLIC":
-      return "mainnet";
-    case "TESTNET":
-      return "testnet";
-    case "FUTURENET":
-      return "futurenet";
-    default:
-      return "custom";
-  }
-};
-
-export const network: Network = {
-  id: networkToId(stellarNetwork),
-  label: stellarNetwork.toLowerCase(),
-  passphrase: networkPassphrase,
-  rpcUrl: rpcUrl,
-  horizonUrl: horizonUrl,
-};
+// Backwards compat: debug components used labPrefix for Stellar Lab links
+export const labPrefix = () =>
+  `https://testnet.arcscan.app`;

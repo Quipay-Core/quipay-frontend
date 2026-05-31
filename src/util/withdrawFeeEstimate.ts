@@ -1,72 +1,51 @@
 /**
- * Builds a PayrollStream `withdraw` invocation and runs Soroban simulation
- * to estimate network fees before the user signs.
+ * withdrawFeeEstimate.ts — ARC gas estimation for withdraw transactions.
+ * Replaces the Soroban XDR simulation version.
+ * On ARC, gas fees are minimal (USDC-denominated, effectively < $0.000001).
  */
 
-import {
-  Contract,
-  TransactionBuilder,
-  Address,
-  nativeToScVal,
-  rpc as SorobanRpc,
-} from "@stellar/stellar-sdk";
-import { networkPassphrase, rpcUrl } from "../contracts/util";
-import { PAYROLL_STREAM_CONTRACT_ID } from "../contracts/payroll_stream";
-import {
-  simulateTransaction,
-  type CurrentBalance,
-  type SimulationResult,
-} from "./simulationUtils";
+import { PAYROLL_STREAM_ADDRESS } from "../contracts/payroll_stream";
+import { PAYROLL_STREAM_ABI } from "../contracts/abi/PayrollStream.abi";
+import { estimateGas } from "./simulationUtils";
 
-const SOROBAN_TX_FEE = "1000000";
+export interface WithdrawFeeEstimate {
+  feeDisplay: string;
+  gasUnits: bigint;
+  available: boolean;
+}
 
 export function isWithdrawFeeEstimateAvailable(): boolean {
-  return Boolean(PAYROLL_STREAM_CONTRACT_ID?.trim());
+  return Boolean(
+    PAYROLL_STREAM_ADDRESS?.trim() &&
+    PAYROLL_STREAM_ADDRESS !== "0x0000000000000000000000000000000000000000"
+  );
 }
 
 /**
- * Simulates `withdraw(stream_id, worker)` against the configured PayrollStream contract.
- * Uses the same RPC URL as the rest of the app (`PUBLIC_STELLAR_RPC_URL`).
+ * Estimate the gas cost for a withdraw() call on PayrollStream.
+ * On ARC, fees are paid in USDC and are negligible.
  */
-export async function simulatePayrollStreamWithdrawFee(
-  workerPublicKey: string,
-  streamId: number,
-  currentBalances: CurrentBalance[],
-): Promise<SimulationResult> {
-  const contractId = PAYROLL_STREAM_CONTRACT_ID?.trim();
-  if (!contractId) {
-    return {
-      status: "error",
-      estimatedFeeStroops: 0,
-      estimatedFeeXLM: 0,
-      balanceChanges: [],
-      errorMessage:
-        "VITE_PAYROLL_STREAM_CONTRACT_ID is not set; cannot estimate withdrawal fee.",
-      restoreRequired: false,
-    };
+export async function estimateWithdrawFee(
+  callerAddress: `0x${string}`,
+  streamId: bigint,
+): Promise<WithdrawFeeEstimate> {
+  if (!isWithdrawFeeEstimateAvailable()) {
+    return { feeDisplay: "< $0.000001", gasUnits: 21000n, available: false };
   }
-
-  const server = new SorobanRpc.Server(rpcUrl, {
-    allowHttp: rpcUrl.startsWith("http://"),
-  });
-
-  const account = await server.getAccount(workerPublicKey);
-  const contract = new Contract(contractId);
-
-  const tx = new TransactionBuilder(account, {
-    fee: SOROBAN_TX_FEE,
-    networkPassphrase,
-  })
-    .addOperation(
-      contract.call(
-        "withdraw",
-        nativeToScVal(BigInt(streamId), { type: "u64" }),
-        new Address(workerPublicKey).toScVal(),
-      ),
-    )
-    .setTimeout(30)
-    .build();
-
-  const prepared = await server.prepareTransaction(tx);
-  return simulateTransaction(prepared, currentBalances, rpcUrl);
+  try {
+    const { encodeFunctionData } = await import("viem");
+    const data = encodeFunctionData({
+      abi: PAYROLL_STREAM_ABI,
+      functionName: "withdraw",
+      args: [streamId],
+    });
+    const estimate = await estimateGas({
+      to: PAYROLL_STREAM_ADDRESS,
+      from: callerAddress,
+      data,
+    });
+    return { feeDisplay: estimate.feeDisplay, gasUnits: estimate.gasUnits, available: true };
+  } catch {
+    return { feeDisplay: "< $0.000001", gasUnits: 60000n, available: true };
+  }
 }

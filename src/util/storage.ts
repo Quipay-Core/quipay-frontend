@@ -22,8 +22,8 @@ export interface Contact {
 type Schema = {
   walletId: string;
   walletAddress: string;
-  walletNetwork: string;
-  networkPassphrase: string;
+  walletNetwork: string;   // kept for backwards compat; stores chain name
+  networkPassphrase: string; // kept for backwards compat; stores chain ID as string
   addressBook: Contact[];
   walletAccounts: string[];
 };
