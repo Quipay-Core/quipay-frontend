@@ -1,24 +1,12 @@
 /**
- * Web3Provider — wraps wagmi's WagmiProvider + ConnectKitProvider.
+ * Web3Provider — wraps wagmi's WagmiProvider + Reown AppKit (WalletConnect).
  * Must be an ancestor of WalletProvider and any wagmi hook consumers.
+ * The AppKit modal is initialised as a side effect of importing ../lib/wagmi.
  */
 
 import { WagmiProvider } from "wagmi";
-import { ConnectKitProvider } from "connectkit";
 import { wagmiConfig } from "../lib/wagmi";
 
 export function Web3Provider({ children }: { children: React.ReactNode }) {
-  return (
-    <WagmiProvider config={wagmiConfig}>
-      <ConnectKitProvider
-        theme="midnight"
-        options={{
-          hideBalance: false,
-          initialChainId: 5042002,
-        }}
-      >
-        {children}
-      </ConnectKitProvider>
-    </WagmiProvider>
-  );
+  return <WagmiProvider config={wagmiConfig}>{children}</WagmiProvider>;
 }

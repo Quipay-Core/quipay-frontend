@@ -65,22 +65,22 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ?? "";
 
 const _employerNameCache = new Map<string, string>();
 
-async function resolveEmployerName(stellarAddress: string): Promise<string> {
-  if (_employerNameCache.has(stellarAddress)) {
-    return _employerNameCache.get(stellarAddress)!;
+async function resolveEmployerName(evmAddress: string): Promise<string> {
+  if (_employerNameCache.has(evmAddress)) {
+    return _employerNameCache.get(evmAddress)!;
   }
   try {
     const res = await fetch(
-      `${API_BASE}/api/employers/by-address?address=${encodeURIComponent(stellarAddress)}`,
+      `${API_BASE}/api/employers/by-address?address=${encodeURIComponent(evmAddress)}`,
     );
     const data = (await res.json()) as {
       employer: { business_name: string } | null;
     };
-    const name = data.employer?.business_name ?? stellarAddress;
-    _employerNameCache.set(stellarAddress, name);
+    const name = data.employer?.business_name ?? evmAddress;
+    _employerNameCache.set(evmAddress, name);
     return name;
   } catch {
-    return stellarAddress;
+    return evmAddress;
   }
 }
 
@@ -160,31 +160,45 @@ export const useStreams = (workerAddress: string | undefined) => {
               stream: streamResults[i],
             }))
             .filter(
-              (x: { id: bigint; stream: ContractStream | null }): x is { id: bigint; stream: ContractStream } =>
+              (x: {
+                id: bigint;
+                stream: ContractStream | null;
+              }): x is { id: bigint; stream: ContractStream } =>
                 x.stream !== null,
             )
-            .map(async ({ id, stream: s }: { id: bigint; stream: ContractStream }) => {
-              const streamId = id.toString();
-              const tokenSymbol = await getTokenSymbol(workerAddress, s.token);
-              const isCompleted = s.status === 2;
-              const proof = isCompleted ? await fetchProof(streamId) : null;
-              const employerName = await resolveEmployerName(s.employer);
-              return {
-                id: streamId,
-                employerName,
-                employerAddress: s.employer,
-                flowRate: Number(s.rate) / USDC_DECIMALS,
-                tokenSymbol,
-                startTime: Number(s.start_ts),
-                endTime: Number(s.end_ts),
-                cliffTime: Number(s.cliff_ts),
-                totalAmount: Number(s.total_amount) / USDC_DECIMALS,
-                claimedAmount: Number(s.withdrawn_amount) / USDC_DECIMALS,
-                status: s.status,
-                proofCid: proof?.cid,
-                proofGatewayUrl: proof?.gatewayUrl,
-              };
-            }),
+            .map(
+              async ({
+                id,
+                stream: s,
+              }: {
+                id: bigint;
+                stream: ContractStream;
+              }) => {
+                const streamId = id.toString();
+                const tokenSymbol = await getTokenSymbol(
+                  workerAddress,
+                  s.token,
+                );
+                const isCompleted = s.status === 2;
+                const proof = isCompleted ? await fetchProof(streamId) : null;
+                const employerName = await resolveEmployerName(s.employer);
+                return {
+                  id: streamId,
+                  employerName,
+                  employerAddress: s.employer,
+                  flowRate: Number(s.rate) / USDC_DECIMALS,
+                  tokenSymbol,
+                  startTime: Number(s.start_ts),
+                  endTime: Number(s.end_ts),
+                  cliffTime: Number(s.cliff_ts),
+                  totalAmount: Number(s.total_amount) / USDC_DECIMALS,
+                  claimedAmount: Number(s.withdrawn_amount) / USDC_DECIMALS,
+                  status: s.status,
+                  proofCid: proof?.cid,
+                  proofGatewayUrl: proof?.gatewayUrl,
+                };
+              },
+            ),
         );
 
         setStreams(workerStreams);
@@ -193,7 +207,10 @@ export const useStreams = (workerAddress: string | undefined) => {
 
         const history: WithdrawalRecord[] = await Promise.all(
           events.map(async (ev) => {
-            const tokenSymbol = await getTokenSymbol(workerAddress, ev.token as `0x${string}`);
+            const tokenSymbol = await getTokenSymbol(
+              workerAddress,
+              ev.token as `0x${string}`,
+            );
             return {
               id: ev.txHash,
               streamId: ev.streamId.toString(),

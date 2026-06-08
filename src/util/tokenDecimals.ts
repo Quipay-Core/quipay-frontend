@@ -3,9 +3,8 @@
  * Defines the number of decimal places for different token types
  */
 export const TOKEN_DECIMALS: Record<string, number> = {
-  XLM: 7,
-  USDC: 2,
-  EURC: 2,
+  USDC: 6,
+  EURC: 6,
   USDT: 6,
   BTC: 8,
   ETH: 18,
@@ -13,12 +12,12 @@ export const TOKEN_DECIMALS: Record<string, number> = {
 
 /**
  * Get the decimal precision for a token
- * Defaults to 7 (Stellar standard) if token not found
- * @param symbol Token symbol (e.g., 'XLM', 'USDC')
+ * Defaults to 6 (ERC-20 USDC standard) if token not found
+ * @param symbol Token symbol (e.g., 'USDC', 'ETH')
  * @returns Number of decimal places for the token
  */
 export const getTokenDecimals = (symbol: string): number => {
-  return TOKEN_DECIMALS[symbol.toUpperCase()] ?? 7;
+  return TOKEN_DECIMALS[symbol.toUpperCase()] ?? 6;
 };
 
 /**

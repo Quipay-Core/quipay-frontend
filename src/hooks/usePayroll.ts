@@ -40,8 +40,8 @@ async function dedupRequest<T>(key: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Stellar uses 7 decimal places (10^7 stroops = 1 token unit). */
-const STROOPS_PER_UNIT = 1e7;
+/** Arc USDC uses 6 decimal places (ERC-20 standard). */
+const USDC_DIVISOR = 1e6;
 
 export interface Stream {
   id: string;
@@ -73,17 +73,12 @@ export interface PayrollSummary {
   streams_active: number;
 }
 
-// Use the actual SAC contract addresses so vault balance queries match deposit keys
-const XLM_SAC =
-  import.meta.env.PUBLIC_XLM_SAC ??
-  "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
-const USDC_ISSUER =
-  import.meta.env.PUBLIC_USDC_ISSUER ??
-  "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5";
+const ARC_USDC =
+  import.meta.env.VITE_USDC_ADDRESS ??
+  "0x3600000000000000000000000000000000000000";
 
 const DEFAULT_TOKENS = [
-  { token: XLM_SAC, tokenSymbol: "XLM", monthlyBurnRate: BigInt(0) },
-  { token: USDC_ISSUER, tokenSymbol: "USDC", monthlyBurnRate: BigInt(0) },
+  { token: ARC_USDC, tokenSymbol: "USDC", monthlyBurnRate: BigInt(0) },
 ];
 
 export const usePayroll = (
@@ -134,7 +129,7 @@ export const usePayroll = (
     } finally {
       setIsVaultLoading(false);
     }
-  }, []);
+  }, [employerAddress]);
 
   const fetchPayrollSummary = useCallback(async (address: string) => {
     // Payroll summary comes from the backend analytics API.
@@ -186,30 +181,37 @@ export const usePayroll = (
             const streamId = String((options?.offset ?? 0) + index + 1);
             const tokenSymbol = await getTokenSymbol(address, s.token);
 
+            // Compute rate from totalAmount / duration (contract stores totalAmount, not ratePerSecond)
+            const durationSecs = Number(s.endTs) - Number(s.startTs);
+            const ratePerSec =
+              durationSecs > 0
+                ? Number(s.totalAmount) / USDC_DIVISOR / durationSecs
+                : 0;
+
+            const fmtDate = (ts: bigint) =>
+              ts > 0n
+                ? new Date(Number(ts) * 1000).toISOString().split("T")[0]
+                : "—";
+
             return {
               id: streamId,
-              employeeName: `Worker ${streamId.slice(0, 8)}`,
+              employeeName: `${s.worker.slice(0, 6)}…${s.worker.slice(-4)}`,
               employeeAddress: s.worker,
-              flowRate: (Number(s.rate) / STROOPS_PER_UNIT).toFixed(7),
+              flowRate: ratePerSec.toFixed(7),
               tokenSymbol,
-              startDate: new Date(Number(s.start_ts) * 1000)
-                .toISOString()
-                .split("T")[0],
-              endDate: new Date(Number(s.end_ts) * 1000)
-                .toISOString()
-                .split("T")[0],
-              totalAmount: (Number(s.total_amount) / STROOPS_PER_UNIT).toFixed(
+              startDate: fmtDate(s.startTs),
+              endDate: fmtDate(s.endTs),
+              totalAmount: (Number(s.totalAmount) / USDC_DIVISOR).toFixed(2),
+              totalStreamed: (Number(s.withdrawnAmount) / USDC_DIVISOR).toFixed(
                 2,
               ),
-              totalStreamed: (
-                Number(s.withdrawn_amount) / STROOPS_PER_UNIT
-              ).toFixed(2),
+              // StreamStatus: Active=0, PendingCancel=1, Cancelled=2, Completed=3, Paused=4
               status:
-                s.status === 1
+                s.status === 2
                   ? "cancelled"
-                  : s.status === 2
+                  : s.status === 3
                     ? "completed"
-                    : s.status === 3
+                    : s.status === 4
                       ? "paused"
                       : "active",
             };

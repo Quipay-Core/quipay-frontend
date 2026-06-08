@@ -19,7 +19,7 @@ const MISSION_POINTS = [
       </svg>
     ),
     title: "Real-time payments",
-    body: "Money flows every second. Workers don't wait for monthly payroll cycles — they earn continuously as they work.",
+    body: "Money flows every second. Workers earn continuously as they work — no waiting for monthly payroll cycles.",
   },
   {
     icon: (
@@ -37,7 +37,7 @@ const MISSION_POINTS = [
       </svg>
     ),
     title: "Trustless by design",
-    body: "Smart contracts on Stellar hold funds in escrow. No employer can withhold pay — the protocol enforces the agreement.",
+    body: "Smart contracts on Arc hold the full stream amount in escrow upfront. No employer can withhold pay — the protocol enforces the agreement.",
   },
   {
     icon: (
@@ -54,7 +54,7 @@ const MISSION_POINTS = [
       </svg>
     ),
     title: "Non-custodial",
-    body: "We never hold your funds. You connect your own Stellar wallet. You control your keys — always.",
+    body: "We never hold your funds. Connect your EVM wallet. You control your keys — always.",
   },
   {
     icon: (
@@ -73,7 +73,7 @@ const MISSION_POINTS = [
       </svg>
     ),
     title: "Borderless",
-    body: "Stellar settles in 3–5 seconds anywhere in the world. Pay contractors across continents at near-zero cost.",
+    body: "Arc settles in seconds anywhere in the world. Pay contractors across continents with USDC — no wire fees, no FX conversion.",
   },
 ];
 
@@ -82,7 +82,7 @@ const TEAM = [
     name: "Ekezie Uchechukwu",
     role: "Founder & Protocol Engineer",
     initials: "EU",
-    bio: "Blockchain engineer focused on DeFi primitives and payment infrastructure on Stellar.",
+    bio: "Blockchain engineer focused on DeFi primitives and payment infrastructure on EVM chains.",
     twitter: "#",
     github: "#",
   },
@@ -100,32 +100,38 @@ const TIMELINE = [
   {
     year: "Q1 2025",
     label: "Concept & Research",
-    note: "Identified gaps in Stellar payroll infra",
+    note: "Identified gaps in Web3 payroll infrastructure",
+    done: true,
   },
   {
     year: "Q2 2025",
     label: "Smart Contract v0",
-    note: "First Soroban streaming contract on testnet",
+    note: "First streaming payroll contract design on EVM testnet",
+    done: true,
   },
   {
     year: "Q3 2025",
     label: "Frontend MVP",
     note: "Dashboard, worker portal, and workforce registry",
+    done: true,
   },
   {
     year: "Q4 2025",
     label: "Open Source Launch",
     note: "Public repo, contributor program launched",
+    done: true,
   },
   {
     year: "Q1 2026",
-    label: "Mainnet Beta",
-    note: "Live streams on Stellar mainnet with real funds",
+    label: "Arc Testnet Deploy",
+    note: "PayrollStream + ProofOfIncome deployed and verified on Arc testnet",
+    done: true,
   },
   {
     year: "Q2 2026",
-    label: "Multi-token & Governance",
-    note: "DAO voting, custom token support, audit complete",
+    label: "Audit & Mainnet",
+    note: "Third-party audit complete, mainnet launch with full dispute resolution",
+    done: false,
   },
 ];
 
@@ -165,7 +171,6 @@ export default function About() {
     <div className="bg-black text-white">
       {/* ─── Hero ──────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden border-b border-white/[0.06] py-28 px-6">
-        {/* Background glow */}
         <div
           className="pointer-events-none absolute -top-40 left-1/2 h-[600px] w-[600px] -translate-x-1/2 rounded-full opacity-[0.06]"
           style={{
@@ -181,8 +186,8 @@ export default function About() {
             <span style={{ color: "#facc15" }}>like water.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-[640px] text-[17px] leading-relaxed text-neutral-500">
-            Quipay is a real-time payroll streaming protocol built on Stellar.
-            We eliminate the wait between work and pay — turning monthly salary
+            Quipay is a real-time payroll streaming protocol built on Arc. We
+            eliminate the wait between work and pay — turning monthly salary
             cycles into continuous, per-second earnings.
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
@@ -262,7 +267,7 @@ export default function About() {
         <div className="mx-auto max-w-[1100px] grid grid-cols-2 gap-6 sm:grid-cols-4">
           {[
             { value: "< 5s", label: "Settlement time" },
-            { value: "$0.001", label: "Avg transaction fee" },
+            { value: "~$0.001", label: "Avg gas fee (USDC)" },
             { value: "100%", label: "Non-custodial" },
             { value: "Open", label: "Source code" },
           ].map(({ value, label }) => (
@@ -281,36 +286,37 @@ export default function About() {
         </div>
       </section>
 
-      {/* ─── Story / Why Stellar ───────────────────────────────────── */}
+      {/* ─── Why Arc ───────────────────────────────────────────────── */}
       <section className="border-b border-white/[0.06] py-24 px-6">
         <div className="mx-auto max-w-[1100px] grid grid-cols-1 gap-16 lg:grid-cols-2 lg:items-center">
           <div>
-            <SectionLabel>Why Stellar</SectionLabel>
+            <SectionLabel>Why Arc</SectionLabel>
             <h2 className="text-[clamp(1.8rem,4vw,2.75rem)] font-black tracking-[-0.025em] text-white mb-6">
               The right chain for payments
             </h2>
             <div className="flex flex-col gap-4 text-[15px] leading-relaxed text-neutral-500">
               <p>
-                Most blockchains are designed for speculation. Stellar was
-                designed for payments. It settles in 3–5 seconds, costs
-                fractions of a cent per transaction, and has native asset
-                issuance baked in.
+                Arc is an EVM chain purpose-built for payments. USDC is the
+                native gas token — there is no separate volatile coin to manage.
+                Every transaction costs a fraction of a cent, settled in
+                seconds.
               </p>
               <p>
-                Soroban — Stellar's smart contract layer — lets us build
-                streaming payment logic that executes on-chain without
-                custodians. The result: payroll that's as fast as the internet,
-                as trustless as math.
+                Our Solidity contracts implement streaming payment logic that
+                executes entirely on-chain: linear vesting with cliff support,
+                pause/resume, grace-period cancellation, and a built-in dispute
+                system with an arbiter role — no custodians required.
               </p>
               <p>
-                We chose Stellar because workers in emerging markets shouldn't
-                wait a month for wages, and because every dollar lost to wire
-                fees or currency conversion is a dollar stolen from a worker.
+                Workers receive a soulbound{" "}
+                <strong className="text-white">ProofOfIncome NFT</strong> when a
+                stream completes — an on-chain verifiable record of earnings
+                that no one can take away.
               </p>
             </div>
           </div>
 
-          {/* Visual — Stellar protocol card */}
+          {/* Protocol stack */}
           <div className="rounded-2xl border border-white/[0.07] bg-[#0a0a0a] p-6">
             <p className="mb-6 text-[11px] font-bold uppercase tracking-widest text-neutral-700">
               Protocol Stack
@@ -319,32 +325,31 @@ export default function About() {
               {[
                 {
                   layer: "Quipay UI",
-                  sub: "React · TypeScript · Tailwind",
-                  color: "#facc15",
+                  sub: "React · TypeScript · Tailwind · wagmi",
                 },
                 {
-                  layer: "Soroban Contracts",
-                  sub: "Streaming escrow · Payroll logic",
-                  color: "#facc15",
+                  layer: "EVM Contracts (Solidity)",
+                  sub: "PayrollStream · ProofOfIncome NFT",
                 },
                 {
-                  layer: "Stellar Network",
-                  sub: "3–5s finality · $0.001 fees",
-                  color: "#facc15",
+                  layer: "Arc Network",
+                  sub: "Fast finality · USDC gas · Chain ID 5042002",
                 },
                 {
                   layer: "Your Wallet",
-                  sub: "Non-custodial · You hold keys",
-                  color: "#facc15",
+                  sub: "Non-custodial · MetaMask · WalletConnect",
                 },
-              ].map(({ layer, sub, color }, i) => (
+              ].map(({ layer, sub }, i) => (
                 <div
                   key={layer}
                   className="flex items-center gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3"
                 >
                   <div
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[11px] font-black text-black"
-                    style={{ backgroundColor: color, opacity: 1 - i * 0.18 }}
+                    style={{
+                      backgroundColor: "#facc15",
+                      opacity: 1 - i * 0.18,
+                    }}
                   >
                     {i + 1}
                   </div>
@@ -355,6 +360,62 @@ export default function About() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Contract features ─────────────────────────────────────── */}
+      <section className="border-b border-white/[0.06] py-24 px-6">
+        <div className="mx-auto max-w-[1100px]">
+          <div className="mb-14 text-center">
+            <SectionLabel>What's on-chain</SectionLabel>
+            <h2 className="text-[clamp(1.8rem,4vw,2.75rem)] font-black tracking-[-0.025em] text-white">
+              Every feature is a contract
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              {
+                title: "Linear streaming + cliff",
+                body: "Funds vest per-second from startTs to endTs. Cliff prevents any withdrawal before a set date.",
+              },
+              {
+                title: "Pause & resume",
+                body: "Employers can pause a stream; the timeline shifts on resume so workers lose no vested time.",
+              },
+              {
+                title: "Grace-period cancellation",
+                body: "Either party can request cancel. A 7-day grace window gives the worker time to withdraw vested wages before the escrow is split.",
+              },
+              {
+                title: "Dispute resolution",
+                body: "Workers or employers can raise a dispute. A trusted arbiter resolves it on-chain with a custom USDC split.",
+              },
+              {
+                title: "Emergency 2-of-3 pause",
+                body: "Three emergency signers can vote to pause the entire protocol. Requires 2 votes — no single key can freeze funds.",
+              },
+              {
+                title: "ProofOfIncome NFT",
+                body: "A soulbound ERC-721 is minted to the worker on stream completion — an on-chain verifiable record of earnings.",
+              },
+            ].map(({ title, body }) => (
+              <div
+                key={title}
+                className="rounded-2xl border border-white/[0.07] bg-[#0a0a0a] p-5"
+              >
+                <div className="mb-2 flex items-center gap-2">
+                  <div
+                    className="h-1.5 w-6 rounded-full shrink-0"
+                    style={{ backgroundColor: "#facc15" }}
+                  />
+                  <h3 className="text-[14px] font-bold text-white">{title}</h3>
+                </div>
+                <p className="text-[13px] leading-relaxed text-neutral-500">
+                  {body}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -370,58 +431,53 @@ export default function About() {
           </div>
 
           <div className="relative">
-            {/* Vertical line */}
             <div className="absolute left-[19px] top-3 bottom-3 w-[2px] bg-white/[0.06] hidden sm:block" />
 
             <div className="flex flex-col gap-0">
-              {TIMELINE.map(({ year, label, note }, i) => {
-                const isPast = i < 4;
-                return (
+              {TIMELINE.map(({ year, label, note, done }, i) => (
+                <div
+                  key={year}
+                  className="relative flex items-start gap-6 py-4 sm:pl-12"
+                >
                   <div
-                    key={year}
-                    className="relative flex items-start gap-6 py-4 sm:pl-12"
+                    className={`absolute left-0 top-5 hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-[10px] font-black ${
+                      done
+                        ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-400"
+                        : "border-white/[0.08] bg-white/[0.04] text-neutral-600"
+                    }`}
                   >
-                    {/* Dot */}
-                    <div
-                      className={`absolute left-0 top-5 hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-[10px] font-black ${
-                        isPast
-                          ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-400"
-                          : "border-white/[0.08] bg-white/[0.04] text-neutral-600"
-                      }`}
-                    >
-                      {isPast ? "✓" : "○"}
-                    </div>
-
-                    <div className="flex-1 rounded-2xl border border-white/[0.06] bg-[#0a0a0a] px-5 py-4">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <span
-                          className={`text-[11px] font-bold uppercase tracking-widest ${
-                            isPast ? "text-yellow-400" : "text-neutral-700"
-                          }`}
-                        >
-                          {year}
-                        </span>
-                        {isPast && (
-                          <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[10px] font-bold text-green-400">
-                            Done
-                          </span>
-                        )}
-                        {!isPast && i === 4 && (
-                          <span className="rounded-full border border-yellow-400/20 bg-yellow-400/10 px-2 py-0.5 text-[10px] font-bold text-yellow-400">
-                            In progress
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-1 text-[15px] font-bold text-white">
-                        {label}
-                      </p>
-                      <p className="mt-0.5 text-[13px] text-neutral-600">
-                        {note}
-                      </p>
-                    </div>
+                    {done ? "✓" : "○"}
                   </div>
-                );
-              })}
+
+                  <div className="flex-1 rounded-2xl border border-white/[0.06] bg-[#0a0a0a] px-5 py-4">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span
+                        className={`text-[11px] font-bold uppercase tracking-widest ${
+                          done ? "text-yellow-400" : "text-neutral-700"
+                        }`}
+                      >
+                        {year}
+                      </span>
+                      {done && (
+                        <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[10px] font-bold text-green-400">
+                          Done
+                        </span>
+                      )}
+                      {!done && i === TIMELINE.length - 1 && (
+                        <span className="rounded-full border border-yellow-400/20 bg-yellow-400/10 px-2 py-0.5 text-[10px] font-bold text-yellow-400">
+                          Next
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[15px] font-bold text-white">
+                      {label}
+                    </p>
+                    <p className="mt-0.5 text-[13px] text-neutral-600">
+                      {note}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -533,7 +589,7 @@ export default function About() {
             Ready to stream payroll?
           </h2>
           <p className="mx-auto mb-10 max-w-[520px] text-[16px] text-neutral-500">
-            Connect your Stellar wallet and create your first payment stream in
+            Connect your EVM wallet and create your first payment stream in
             under 3 minutes.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">

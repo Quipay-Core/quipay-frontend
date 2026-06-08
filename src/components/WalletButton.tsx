@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useAppKit } from "@reown/appkit/react";
 import { useWallet } from "../hooks/useWallet";
-import { connectWallet } from "../util/wallet";
 
-const truncate = (addr: string) => `${addr.slice(0, 4)}...${addr.slice(-4)}`;
+const truncate = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
-const formatXlm = (raw?: string) => {
+const formatUsdc = (raw?: string) => {
   if (!raw) return "--";
   const n = Number(raw);
   return Number.isFinite(n)
@@ -20,9 +20,10 @@ const formatXlm = (raw?: string) => {
 export const WalletButton = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { open } = useAppKit();
   const [showModal, setShowModal] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  const [connecting, setConnecting] = useState(false);
+
   const {
     address,
     isPending,
@@ -34,9 +35,9 @@ export const WalletButton = () => {
     switchAccount,
   } = useWallet();
 
-  const xlm = useMemo(
-    () => formatXlm(balances?.xlm?.balance),
-    [balances?.xlm?.balance],
+  const usdc = useMemo(
+    () => formatUsdc(balances?.USDC?.balance),
+    [balances?.USDC?.balance],
   );
 
   useEffect(() => {
@@ -50,35 +51,21 @@ export const WalletButton = () => {
 
   // ── Disconnected ──────────────────────────────────────────────────────────
   if (!address) {
-    const hasError = Boolean(connectionError);
-    const pending = connecting && !hasError;
-
     return (
       <div className="flex flex-col items-end gap-1.5">
         <button
           type="button"
-          disabled={pending}
           aria-label={t("wallet.connect")}
           onClick={() => {
             clearError();
-            setConnecting(true);
-            void connectWallet().finally(() => setConnecting(false));
+            void open();
           }}
-          className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-transparent px-4 py-[7px] text-[13px] font-medium text-white/80 transition-all duration-150 hover:border-white/30 hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-transparent px-4 py-[7px] text-[13px] font-medium text-white/80 transition-all duration-150 hover:border-white/30 hover:bg-white/[0.05] hover:text-white"
         >
-          {pending ? (
-            <>
-              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white/80" />
-              {t("wallet.connecting")}
-            </>
-          ) : (
-            <>
-              <span className="h-2 w-2 rounded-full bg-yellow-400" />
-              {t("wallet.connect")}
-            </>
-          )}
+          <span className="h-2 w-2 rounded-full bg-yellow-400" />
+          {t("wallet.connect")}
         </button>
-        {hasError && (
+        {connectionError && (
           <p className="text-right text-[11px] text-red-400">
             {t("wallet.connection_failed")}
           </p>
@@ -97,22 +84,17 @@ export const WalletButton = () => {
         aria-haspopup="dialog"
         className="group inline-flex items-center gap-2.5 rounded-lg border border-white/10 bg-neutral-900 px-3 py-[7px] transition-all duration-150 hover:border-white/20 hover:bg-neutral-800"
       >
-        {/* Avatar */}
         <div className="flex h-6 w-6 items-center justify-center rounded-md bg-yellow-400 text-[10px] font-black text-black shrink-0">
-          {address.slice(1, 3).toUpperCase()}
+          {address.slice(2, 4).toUpperCase()}
         </div>
-
-        {/* Address + balance */}
         <div className="flex flex-col items-start leading-none">
           <span className="text-[13px] font-medium text-white">
             {truncate(address)}
           </span>
           <span className="text-[11px] text-neutral-500 mt-[2px]">
-            {xlm} XLM
+            {usdc} USDC
           </span>
         </div>
-
-        {/* Status dot */}
         <div className="flex items-center justify-center ml-0.5">
           {isPending ? (
             <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-neutral-600 border-t-white/60" />
@@ -122,7 +104,6 @@ export const WalletButton = () => {
         </div>
       </button>
 
-      {/* ── Disconnect modal ── */}
       {showModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
@@ -142,7 +123,6 @@ export const WalletButton = () => {
               Connected Accounts
             </h3>
 
-            {/* Account list */}
             <div className="max-h-40 overflow-y-auto space-y-1.5 mb-4">
               {accounts.map((acc) => (
                 <button
@@ -161,7 +141,7 @@ export const WalletButton = () => {
                   }`}
                 >
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-yellow-400 text-xs font-black text-black shrink-0">
-                    {acc.slice(1, 3).toUpperCase()}
+                    {acc.slice(2, 4).toUpperCase()}
                   </div>
                   <div className="flex flex-col flex-1 overflow-hidden">
                     <span className="text-[13px] font-medium text-white truncate">
@@ -177,21 +157,18 @@ export const WalletButton = () => {
               ))}
             </div>
 
-            {/* Add account */}
             <button
               type="button"
               onClick={() => {
                 clearError();
-                setConnecting(true);
                 setShowModal(false);
-                void connectWallet().finally(() => setConnecting(false));
+                void open();
               }}
               className="w-full mb-4 text-[13px] text-neutral-500 hover:text-white text-center font-medium transition-colors"
             >
               + Add another account
             </button>
 
-            {/* Actions */}
             <div className="flex gap-2">
               <button
                 type="button"

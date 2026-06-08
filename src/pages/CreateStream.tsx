@@ -1,33 +1,63 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useWriteContract } from "wagmi";
+import { createPublicClient, http } from "viem";
 import { useNotification } from "../hooks/useNotification";
 import { useWallet } from "../hooks/useWallet";
-import { useWorkforceRegistry } from "../hooks/useWorkforceRegistry";
-import {
-  buildBatchCreateStreamsTx,
-  submitAndAwaitTx,
-  type BatchStreamEntry,
-} from "../contracts/payroll_stream";
+import { PAYROLL_STREAM_ADDRESS } from "../contracts/payroll_stream";
+import { PAYROLL_STREAM_ABI } from "../contracts/abi/PayrollStream.abi";
+import { ARC_USDC_ADDRESS, arcTestnet, parseUsdc } from "../contracts/util";
 import { SeoHelmet } from "../components/seo/SeoHelmet";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const STROOPS = 1e7;
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
-const TOKEN_ADDRESS: Record<string, string> = {
-  XLM: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
-  USDC: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
-};
+const ERC20_APPROVE_ABI = [
+  {
+    type: "function",
+    name: "approve",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "nonpayable",
+  },
+] as const;
 
-function toUnixSec(d: string) {
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface EmployeeRow {
+  worker_address: string;
+  full_name: string;
+  job_title: string;
+  department: string | null;
+  work_email: string | null;
+  start_date: string | null;
+  employee_ref: string | null;
+  registered_at: string;
+}
+
+type TxStep =
+  | "idle"
+  | "approving"
+  | "approve-wait"
+  | "creating"
+  | "create-wait"
+  | "done";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function toUnixSec(d: string): number {
   return Math.floor(new Date(d).getTime() / 1000);
 }
 
-function shortAddr(a: string) {
+function shortAddr(a: string): string {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
 
-function initials(name: string | undefined, wallet: string) {
+function getInitials(name: string, wallet: string): string {
   if (!name) return wallet.slice(1, 3).toUpperCase();
   const parts = name.trim().split(/\s+/);
   return parts.length >= 2
@@ -39,170 +69,290 @@ function initials(name: string | undefined, wallet: string) {
 
 const CreateStream: React.FC = () => {
   const navigate = useNavigate();
-  const { address, signTransaction } = useWallet();
-  const { addNotification, addStreamNotification } = useNotification();
-  const { workers, isLoading } = useWorkforceRegistry(address);
+  const [searchParams] = useSearchParams();
+  const preselectedWorker = searchParams.get("worker")?.toLowerCase() ?? null;
 
-  // ── Shared config ─────────────────────────────────────────────────────────
-  const [token, setToken] = useState("XLM");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [cliffDate, setCliffDate] = useState("");
+  const { address } = useWallet();
+  const { addNotification } = useNotification();
+  const { writeContractAsync } = useWriteContract();
 
-  // ── Per-worker amounts & selection ────────────────────────────────────────
+  // ── Workers ──────────────────────────────────────────────────────────────
+
+  const [workers, setWorkers] = useState<EmployeeRow[]>([]);
+  const [isLoadingWorkers, setIsLoadingWorkers] = useState(false);
+  const [workerError, setWorkerError] = useState<string | null>(null);
+  const [workerTick, setWorkerTick] = useState(0);
+
+  useEffect(() => {
+    if (!address) return;
+    const run = async () => {
+      setIsLoadingWorkers(true);
+      setWorkerError(null);
+      try {
+        const r = await fetch(`${API_BASE}/api/employers/employees`, {
+          headers: { "x-user-id": address, "x-user-role": "user" },
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const j = (await r.json()) as { employees?: EmployeeRow[] };
+        setWorkers(j.employees ?? []);
+      } catch (e: unknown) {
+        setWorkerError(
+          e instanceof Error ? e.message : "Failed to load workers",
+        );
+      } finally {
+        setIsLoadingWorkers(false);
+      }
+    };
+    void run();
+  }, [address, workerTick]);
+
+  // ── Selection + amounts ───────────────────────────────────────────────────
+
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [bulkAmount, setBulkAmount] = useState("");
 
+  // Once workers load, set initial selection.
+  // If ?worker= is present, select only that worker; otherwise select all.
   useEffect(() => {
     if (workers.length === 0) return;
-    const id = setTimeout(() => {
+    const update = () => {
       setSelected((prev) => {
         const next = { ...prev };
         workers.forEach((w) => {
-          if (next[w.wallet] === undefined) next[w.wallet] = true;
+          if (next[w.worker_address] === undefined) {
+            next[w.worker_address] = preselectedWorker
+              ? w.worker_address.toLowerCase() === preselectedWorker
+              : true;
+          }
         });
         return next;
       });
-    }, 0);
-    return () => clearTimeout(id);
-  }, [workers]);
+    };
+    update();
+  }, [workers, preselectedWorker]);
 
-  const toggleWorker = (wallet: string) =>
-    setSelected((s) => ({ ...s, [wallet]: !s[wallet] }));
+  const toggleWorker = (addr: string) =>
+    setSelected((s) => ({ ...s, [addr]: !s[addr] }));
 
-  const setAmount = (wallet: string, val: string) =>
-    setAmounts((a) => ({ ...a, [wallet]: val }));
+  const setAmount = (addr: string, val: string) =>
+    setAmounts((a) => ({ ...a, [addr]: val }));
 
   const applyBulkAmount = () => {
     if (!bulkAmount) return;
     const next: Record<string, string> = { ...amounts };
     workers
-      .filter((w) => selected[w.wallet])
+      .filter((w) => selected[w.worker_address])
       .forEach((w) => {
-        next[w.wallet] = bulkAmount;
+        next[w.worker_address] = bulkAmount;
       });
     setAmounts(next);
   };
 
-  const selectedWorkers = workers.filter((w) => selected[w.wallet]);
-  const totalAmount = selectedWorkers.reduce(
-    (s, w) => s + (parseFloat(amounts[w.wallet] ?? "") || 0),
+  const selectedWorkers = workers.filter((w) => selected[w.worker_address]);
+
+  const totalUsdcFloat = selectedWorkers.reduce(
+    (s, w) => s + (parseFloat(amounts[w.worker_address] ?? "") || 0),
     0,
   );
 
-  // ── Validation ────────────────────────────────────────────────────────────
+  // ── Stream config ─────────────────────────────────────────────────────────
+
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [cliffDate, setCliffDate] = useState("");
+
   const startTs = startDate ? toUnixSec(startDate) : 0;
   const endTs = endDate ? toUnixSec(endDate) : 0;
   const cliffTs = cliffDate ? toUnixSec(cliffDate) : startTs;
   const durDays = startTs && endTs ? Math.round((endTs - startTs) / 86400) : 0;
 
+  // ── Validation ────────────────────────────────────────────────────────────
+
+  const missingAmounts = selectedWorkers.filter(
+    (w) => !(parseFloat(amounts[w.worker_address] ?? "") > 0),
+  );
+
   const canSubmit =
     !!address &&
     selectedWorkers.length > 0 &&
-    selectedWorkers.every((w) => parseFloat(amounts[w.wallet] ?? "") > 0) &&
+    missingAmounts.length === 0 &&
     startDate.length > 0 &&
     endDate.length > 0 &&
     endTs > startTs &&
     (!cliffDate || (cliffTs >= startTs && cliffTs <= endTs));
 
-  const missingAmounts = selectedWorkers.filter(
-    (w) => !(parseFloat(amounts[w.wallet] ?? "") > 0),
-  );
+  // ── Transaction ───────────────────────────────────────────────────────────
 
-  // ── Transaction state ─────────────────────────────────────────────────────
-  const [submitting, setSubmitting] = useState(false);
-  const [submitStep, setSubmitStep] = useState<
-    "building" | "signing" | "sending" | ""
-  >("");
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [txStep, setTxStep] = useState<TxStep>("idle");
+  const [txError, setTxError] = useState<string | null>(null);
+
+  const isSubmitting = txStep !== "idle" && txStep !== "done";
 
   const handleSubmit = async () => {
-    if (!address || !signTransaction || !canSubmit) return;
-    setSubmitError(null);
-    setSubmitting(true);
+    if (!address || !canSubmit) return;
+    setTxError(null);
+
+    const totalUsdc = selectedWorkers.reduce(
+      (sum, w) => sum + parseUsdc(amounts[w.worker_address] ?? "0"),
+      0n,
+    );
+
+    const params = selectedWorkers.map((w) => ({
+      worker: w.worker_address,
+      token: ARC_USDC_ADDRESS,
+      totalAmount: parseUsdc(amounts[w.worker_address] ?? "0"),
+      startTs: BigInt(startTs),
+      endTs: BigInt(endTs),
+      cliffTs: BigInt(cliffTs),
+      metadataHash:
+        "0x0000000000000000000000000000000000000000000000000000000000000000",
+    }));
+
+    const client = createPublicClient({ chain: arcTestnet, transport: http() });
 
     try {
-      const durSec = endTs - startTs;
-      const entries: BatchStreamEntry[] = selectedWorkers.map((w) => {
-        const totalStroops = BigInt(
-          Math.round(parseFloat(amounts[w.wallet]) * STROOPS),
-        );
-        const rate = durSec > 0 ? totalStroops / BigInt(durSec) : BigInt(1);
-        return {
-          worker: w.wallet,
-          token: TOKEN_ADDRESS[token] ?? "",
-          rate,
-          startTs,
-          endTs,
-          ...(cliffDate ? { cliffTs } : {}),
-        };
+      // Step 1 — Approve USDC
+      setTxStep("approving");
+      const approveHash = await writeContractAsync({
+        address: ARC_USDC_ADDRESS,
+        abi: ERC20_APPROVE_ABI,
+        functionName: "approve",
+        args: [PAYROLL_STREAM_ADDRESS, totalUsdc],
       });
 
-      setSubmitStep("building");
-      const { preparedXdr } = await buildBatchCreateStreamsTx(address, entries);
+      setTxStep("approve-wait");
+      await client.waitForTransactionReceipt({ hash: approveHash });
 
-      setSubmitStep("signing");
-      const { signedTxXdr } = await signTransaction(preparedXdr, {
-        networkPassphrase: import.meta.env
-          .PUBLIC_STELLAR_NETWORK_PASSPHRASE as string,
-      });
+      // Step 2 — Create stream(s)
+      setTxStep("creating");
+      const createHash =
+        params.length === 1
+          ? await writeContractAsync({
+              address: PAYROLL_STREAM_ADDRESS,
+              abi: PAYROLL_STREAM_ABI,
+              functionName: "createStream",
+              args: [params[0]],
+            })
+          : await writeContractAsync({
+              address: PAYROLL_STREAM_ADDRESS,
+              abi: PAYROLL_STREAM_ABI,
+              functionName: "batchCreate",
+              args: [params],
+            });
 
-      setSubmitStep("sending");
-      await submitAndAwaitTx(signedTxXdr);
+      setTxStep("create-wait");
+      await client.waitForTransactionReceipt({ hash: createHash });
 
-      addStreamNotification("stream_started", {
-        message: `${selectedWorkers.length} stream${selectedWorkers.length > 1 ? "s" : ""} created.`,
-        dedupeKey: "batch-create",
-      });
+      setTxStep("done");
       addNotification(
         `${selectedWorkers.length} stream${selectedWorkers.length !== 1 ? "s" : ""} created!`,
         "success",
       );
-      void navigate("/dashboard");
+      void navigate("/workforce");
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Transaction failed");
-    } finally {
-      setSubmitting(false);
-      setSubmitStep("");
+      const msg = err instanceof Error ? err.message : "Transaction failed";
+      setTxError(msg.length > 200 ? msg.slice(0, 200) + "…" : msg);
+      setTxStep("idle");
     }
   };
 
-  // ── UI ────────────────────────────────────────────────────────────────────
+  // ── Overlay labels ────────────────────────────────────────────────────────
+
+  const overlayTitle =
+    txStep === "approving"
+      ? "Approve USDC in your wallet"
+      : txStep === "approve-wait"
+        ? "Approving USDC…"
+        : txStep === "creating"
+          ? "Confirm stream creation"
+          : "Creating streams on Arc…";
+
+  const overlaySub =
+    txStep === "approving"
+      ? `Approve ${totalUsdcFloat.toLocaleString()} USDC for the PayrollStream contract`
+      : txStep === "approve-wait"
+        ? "Waiting for approval to confirm on Arc"
+        : txStep === "creating"
+          ? `Review the ${selectedWorkers.length > 1 ? "batch " : ""}stream transaction in your wallet`
+          : `Confirming ${selectedWorkers.length} stream${selectedWorkers.length !== 1 ? "s" : ""} on Arc Testnet`;
+
+  const isApprovePhase = txStep === "approving" || txStep === "approve-wait";
+
+  // ── No wallet ─────────────────────────────────────────────────────────────
+
+  if (!address) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 px-6 text-center">
+        <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-yellow-400/20 bg-yellow-400/10">
+          <svg
+            className="h-8 w-8 text-yellow-400"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.75"
+          >
+            <rect x="2" y="7" width="20" height="14" rx="2" />
+            <path d="M16 12h.01" strokeLinecap="round" />
+            <path d="M2 7l10-5 10 5" />
+          </svg>
+        </div>
+        <h2 className="text-[20px] font-bold text-white mb-2">
+          Connect your wallet
+        </h2>
+        <p className="text-[14px] text-neutral-500">
+          Connect to create payroll streams.
+        </p>
+      </div>
+    );
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
   return (
     <>
       <SeoHelmet
         title="Create Streams · Quipay"
-        description="Pay your registered workers."
+        description="Set up payroll streams for your workers on Arc."
         path="/create-stream"
         robots="noindex,nofollow"
       />
 
       {/* Transaction overlay */}
-      {submitting && (
+      {isSubmitting && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl border border-white/[0.1] bg-[#111] p-8 text-center shadow-2xl">
             <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-yellow-400/10">
               <div className="h-7 w-7 animate-spin rounded-full border-2 border-white/10 border-t-yellow-400" />
             </div>
             <p className="text-[16px] font-bold text-white mb-1">
-              {submitStep === "building" && "Preparing transaction…"}
-              {submitStep === "signing" && "Check Freighter to sign"}
-              {submitStep === "sending" && "Broadcasting to Stellar…"}
+              {overlayTitle}
             </p>
-            <p className="text-[13px] text-neutral-600">
-              {submitStep === "building" &&
-                `Simulating ${selectedWorkers.length} stream${selectedWorkers.length !== 1 ? "s" : ""}`}
-              {submitStep === "signing" &&
-                "Approve the transaction in your wallet"}
-              {submitStep === "sending" &&
-                "Waiting for ledger confirmation (~5s)"}
+            <p className="text-[13px] text-neutral-600">{overlaySub}</p>
+
+            {/* Step progress */}
+            <div className="mt-5 flex items-center justify-center gap-2">
+              <div
+                className={`h-1.5 w-14 rounded-full transition-colors ${
+                  isApprovePhase ? "bg-yellow-400" : "bg-green-400"
+                }`}
+              />
+              <div
+                className={`h-1.5 w-14 rounded-full transition-colors ${
+                  !isApprovePhase ? "bg-yellow-400" : "bg-white/10"
+                }`}
+              />
+            </div>
+            <p className="mt-2 text-[10px] text-neutral-700">
+              {isApprovePhase
+                ? "Step 1 of 2 — Approve USDC"
+                : "Step 2 of 2 — Create Streams"}
             </p>
           </div>
         </div>
       )}
 
-      <div className="px-6 py-8 sm:px-8 sm:py-10 max-w-[960px]">
+      <div className="px-6 py-8 sm:px-8 sm:py-10">
         {/* Header */}
         <div className="mb-8 flex items-start justify-between gap-4">
           <div>
@@ -210,20 +360,19 @@ const CreateStream: React.FC = () => {
               Create Payment Streams
             </h1>
             <p className="mt-1 text-[14px] text-neutral-500">
-              Select employees, set their amounts, and pay everyone in one
-              on-chain transaction.
+              Select workers, set USDC amounts, and stream payroll on Arc.
             </p>
           </div>
           <button
-            onClick={() => void navigate("/dashboard")}
+            onClick={() => void navigate("/workforce")}
             className="shrink-0 rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2 text-[13px] font-semibold text-white hover:bg-white/[0.08] transition-colors"
           >
             Cancel
           </button>
         </div>
 
-        {/* Error */}
-        {submitError && (
+        {/* Tx error */}
+        {txError && (
           <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/[0.06] px-5 py-4">
             <svg
               className="mt-0.5 h-4 w-4 shrink-0 text-red-400"
@@ -242,11 +391,11 @@ const CreateStream: React.FC = () => {
                 Transaction failed
               </p>
               <p className="text-[12px] text-red-400/70 mt-0.5 break-all">
-                {submitError}
+                {txError}
               </p>
             </div>
             <button
-              onClick={() => setSubmitError(null)}
+              onClick={() => setTxError(null)}
               className="shrink-0 text-red-700 hover:text-red-400 transition-colors"
             >
               <svg
@@ -268,7 +417,7 @@ const CreateStream: React.FC = () => {
           {/* ── Left: worker list ── */}
           <div className="flex flex-col gap-4">
             {/* Loading */}
-            {isLoading && (
+            {isLoadingWorkers && (
               <div className="rounded-2xl border border-white/[0.07] bg-[#0a0a0a] p-10 text-center">
                 <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-white/10 border-t-yellow-400" />
                 <p className="mt-3 text-[13px] text-neutral-600">
@@ -277,8 +426,21 @@ const CreateStream: React.FC = () => {
               </div>
             )}
 
+            {/* Worker load error */}
+            {!isLoadingWorkers && workerError && (
+              <div className="rounded-2xl border border-red-500/20 bg-red-500/[0.06] p-6 text-center">
+                <p className="text-[13px] text-red-400">{workerError}</p>
+                <button
+                  onClick={() => setWorkerTick((t) => t + 1)}
+                  className="mt-3 text-[12px] text-red-400 underline hover:text-red-300"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
             {/* No workers */}
-            {!isLoading && workers.length === 0 && (
+            {!isLoadingWorkers && !workerError && workers.length === 0 && (
               <div className="rounded-2xl border border-dashed border-white/[0.08] bg-[#0a0a0a] p-12 text-center">
                 <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.07] bg-white/[0.04]">
                   <svg
@@ -294,48 +456,31 @@ const CreateStream: React.FC = () => {
                   </svg>
                 </div>
                 <p className="text-[15px] font-bold text-white mb-1">
-                  No employees yet
+                  No workers registered
                 </p>
                 <p className="text-[13px] text-neutral-600 mb-5">
-                  Employees search for your company by name and register
-                  themselves. Your company must be verified for them to find it.
+                  Share your invite link so workers can join and register their
+                  wallets.
                 </p>
-                <div className="mx-auto flex max-w-xs items-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-3">
-                  <span className="flex-1 truncate font-mono text-[12px] text-neutral-400">
-                    {address}
-                  </span>
-                  <button
-                    onClick={() => {
-                      void navigator.clipboard.writeText(address ?? "");
-                      addNotification("Address copied", "success");
-                    }}
-                    className="shrink-0 text-neutral-600 hover:text-yellow-400 transition-colors"
-                  >
-                    <svg
-                      className="h-4 w-4"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <rect x="9" y="9" width="13" height="13" rx="2" />
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                    </svg>
-                  </button>
-                </div>
+                <button
+                  onClick={() => void navigate("/workforce")}
+                  className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2 text-[13px] font-semibold text-white hover:bg-white/[0.08] transition-colors"
+                >
+                  Go to Workforce
+                </button>
               </div>
             )}
 
             {/* Worker checklist */}
-            {!isLoading && workers.length > 0 && (
+            {!isLoadingWorkers && workers.length > 0 && (
               <div className="rounded-2xl border border-white/[0.07] bg-[#0a0a0a] overflow-hidden">
-                {/* Header */}
+                {/* Table header */}
                 <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-3">
                   <p className="text-[13px] font-bold text-white">
-                    {workers.length} employee{workers.length !== 1 ? "s" : ""}
+                    {workers.length} worker
+                    {workers.length !== 1 ? "s" : ""}
                   </p>
                   <div className="flex items-center gap-3">
-                    {/* Bulk amount */}
                     <div className="flex items-center gap-1.5">
                       <input
                         type="number"
@@ -343,8 +488,8 @@ const CreateStream: React.FC = () => {
                         step="0.01"
                         value={bulkAmount}
                         onChange={(e) => setBulkAmount(e.target.value)}
-                        placeholder="Same amount…"
-                        className="w-[120px] rounded-lg border border-white/[0.1] bg-black px-3 py-1.5 text-right text-[12px] text-white placeholder:text-neutral-700 focus:outline-none focus:border-yellow-400/40 transition-colors"
+                        placeholder="Bulk amount…"
+                        className="w-[130px] rounded-lg border border-white/[0.1] bg-black px-3 py-1.5 text-right text-[12px] text-white placeholder:text-neutral-700 focus:outline-none focus:border-yellow-400/40 transition-colors"
                       />
                       <button
                         onClick={applyBulkAmount}
@@ -357,41 +502,42 @@ const CreateStream: React.FC = () => {
                     <button
                       onClick={() => {
                         const allSelected = workers.every(
-                          (w) => selected[w.wallet],
+                          (w) => selected[w.worker_address],
                         );
                         const next: Record<string, boolean> = {};
                         workers.forEach((w) => {
-                          next[w.wallet] = !allSelected;
+                          next[w.worker_address] = !allSelected;
                         });
                         setSelected(next);
                       }}
                       className="text-[12px] font-semibold transition-colors hover:text-white"
                       style={{ color: "#facc15" }}
                     >
-                      {workers.every((w) => selected[w.wallet])
+                      {workers.every((w) => selected[w.worker_address])
                         ? "Deselect all"
                         : "Select all"}
                     </button>
                   </div>
                 </div>
 
-                {/* Workers */}
+                {/* Worker rows */}
                 <div className="divide-y divide-white/[0.04]">
                   {workers.map((w) => {
-                    const isSelected = !!selected[w.wallet];
-                    const amt = amounts[w.wallet] ?? "";
-                    const displayName = w.fullName ?? shortAddr(w.wallet);
+                    const isSelected = !!selected[w.worker_address];
+                    const amt = amounts[w.worker_address] ?? "";
                     const subtitle =
-                      [w.jobTitle, w.department].filter(Boolean).join(" · ") ||
-                      shortAddr(w.wallet);
+                      [w.job_title, w.department].filter(Boolean).join(" · ") ||
+                      shortAddr(w.worker_address);
                     return (
                       <div
-                        key={w.wallet}
-                        className={`flex items-center gap-4 px-5 py-4 transition-colors ${isSelected ? "bg-yellow-400/[0.02]" : "opacity-50"}`}
+                        key={w.worker_address}
+                        className={`flex items-center gap-4 px-5 py-4 transition-colors ${
+                          isSelected ? "bg-yellow-400/[0.02]" : "opacity-50"
+                        }`}
                       >
                         {/* Checkbox */}
                         <button
-                          onClick={() => toggleWorker(w.wallet)}
+                          onClick={() => toggleWorker(w.worker_address)}
                           className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${
                             isSelected
                               ? "border-yellow-400/60 bg-yellow-400/20"
@@ -421,30 +567,21 @@ const CreateStream: React.FC = () => {
                             opacity: isSelected ? 1 : 0.5,
                           }}
                         >
-                          {initials(w.fullName, w.wallet)}
+                          {getInitials(w.full_name, w.worker_address)}
                         </div>
 
                         {/* Info */}
                         <div className="flex-1 min-w-0">
                           <p className="text-[14px] font-semibold text-white truncate">
-                            {displayName}
+                            {w.full_name}
                           </p>
                           <p className="text-[11px] text-neutral-500 truncate">
                             {subtitle}
                           </p>
-                          {w.fullName && (
-                            <p className="font-mono text-[10px] text-neutral-700 truncate mt-0.5">
-                              {shortAddr(w.wallet)}
-                            </p>
-                          )}
+                          <p className="font-mono text-[10px] text-neutral-700 truncate mt-0.5">
+                            {shortAddr(w.worker_address)}
+                          </p>
                         </div>
-
-                        {/* Stream badge */}
-                        {w.activeStreams > 0 && (
-                          <span className="shrink-0 rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] font-bold text-green-400">
-                            {w.activeStreams} active
-                          </span>
-                        )}
 
                         {/* Amount input */}
                         <div className="flex items-center gap-2 shrink-0">
@@ -455,7 +592,7 @@ const CreateStream: React.FC = () => {
                             value={amt}
                             disabled={!isSelected}
                             onChange={(e) =>
-                              setAmount(w.wallet, e.target.value)
+                              setAmount(w.worker_address, e.target.value)
                             }
                             placeholder="0.00"
                             className={`w-[100px] rounded-xl border bg-black px-3 py-2 text-right text-[13px] text-white placeholder:text-neutral-700 focus:outline-none focus:border-yellow-400/40 focus:ring-1 focus:ring-yellow-400/20 disabled:opacity-30 ${
@@ -464,8 +601,8 @@ const CreateStream: React.FC = () => {
                                 : "border-white/[0.1]"
                             }`}
                           />
-                          <span className="text-[12px] font-semibold text-neutral-600 w-10 shrink-0">
-                            {token}
+                          <span className="text-[12px] font-semibold text-neutral-600 w-12 shrink-0">
+                            USDC
                           </span>
                         </div>
                       </div>
@@ -484,19 +621,20 @@ const CreateStream: React.FC = () => {
                 Stream Settings
               </p>
               <div className="flex flex-col gap-4">
-                {/* Token */}
+                {/* Token — fixed USDC */}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-bold uppercase tracking-widest text-neutral-500">
                     Token
                   </label>
-                  <select
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    className="w-full rounded-xl border border-white/[0.1] bg-black px-4 py-2.5 text-[13px] text-white focus:border-yellow-400/40 focus:outline-none [color-scheme:dark]"
-                  >
-                    <option value="XLM">XLM (Native)</option>
-                    <option value="USDC">USDC</option>
-                  </select>
+                  <div className="flex items-center gap-2 rounded-xl border border-white/[0.1] bg-black px-4 py-2.5">
+                    <div className="h-2 w-2 rounded-full bg-green-400 shrink-0" />
+                    <span className="text-[13px] font-semibold text-white">
+                      USDC
+                    </span>
+                    <span className="ml-auto font-mono text-[11px] text-neutral-700">
+                      Arc Testnet
+                    </span>
+                  </div>
                 </div>
 
                 {/* Start date */}
@@ -522,7 +660,7 @@ const CreateStream: React.FC = () => {
                       Cliff Date
                     </label>
                     <span className="text-[10px] text-neutral-600">
-                      No withdrawals before this date
+                      No withdrawals before
                     </span>
                   </div>
                   <input
@@ -533,11 +671,6 @@ const CreateStream: React.FC = () => {
                     onChange={(e) => setCliffDate(e.target.value)}
                     className="w-full rounded-xl border border-white/[0.1] bg-black px-4 py-2.5 text-[13px] text-white focus:border-yellow-400/40 focus:outline-none [color-scheme:dark]"
                   />
-                  {cliffDate && startDate && cliffDate === startDate && (
-                    <p className="text-[10px] text-neutral-600">
-                      Cliff = start date means no lock period.
-                    </p>
-                  )}
                 </div>
 
                 {/* End date */}
@@ -561,23 +694,21 @@ const CreateStream: React.FC = () => {
               <p className="mb-4 text-[13px] font-bold text-white">Summary</p>
               <div className="flex flex-col gap-3">
                 <div className="flex justify-between">
-                  <span className="text-[13px] text-neutral-500">
-                    Employees
-                  </span>
+                  <span className="text-[13px] text-neutral-500">Workers</span>
                   <span className="text-[13px] font-semibold text-white">
                     {selectedWorkers.length}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[13px] text-neutral-500">
-                    Total {token}
+                    Total USDC
                   </span>
                   <span
                     className="text-[13px] font-bold"
                     style={{ color: "#facc15" }}
                   >
-                    {totalAmount.toLocaleString(undefined, {
-                      maximumFractionDigits: 4,
+                    {totalUsdcFloat.toLocaleString(undefined, {
+                      maximumFractionDigits: 2,
                     })}
                   </span>
                 </div>
@@ -605,42 +736,53 @@ const CreateStream: React.FC = () => {
                       </span>
                     </div>
                   )}
-                {totalAmount > 0 && durDays > 0 && (
-                  <>
-                    <div className="my-1 h-px bg-white/[0.06]" />
-                    <div className="flex justify-between">
-                      <span className="text-[13px] text-neutral-500">
-                        Rate / employee / day
-                      </span>
-                      <span className="text-[13px] font-semibold text-white">
-                        {selectedWorkers.length > 0
-                          ? (
-                              totalAmount /
-                              selectedWorkers.length /
-                              durDays
-                            ).toLocaleString(undefined, {
-                              maximumFractionDigits: 4,
-                            })
-                          : "—"}{" "}
-                        {token}
-                      </span>
-                    </div>
-                  </>
-                )}
+                {totalUsdcFloat > 0 &&
+                  durDays > 0 &&
+                  selectedWorkers.length > 0 && (
+                    <>
+                      <div className="my-1 h-px bg-white/[0.06]" />
+                      <div className="flex justify-between">
+                        <span className="text-[13px] text-neutral-500">
+                          Per worker / day
+                        </span>
+                        <span className="text-[13px] font-semibold text-white">
+                          {(
+                            totalUsdcFloat /
+                            selectedWorkers.length /
+                            durDays
+                          ).toLocaleString(undefined, {
+                            maximumFractionDigits: 4,
+                          })}{" "}
+                          USDC
+                        </span>
+                      </div>
+                    </>
+                  )}
               </div>
 
               {missingAmounts.length > 0 && (
                 <p className="mt-3 text-[11px] text-yellow-400/70">
                   {missingAmounts.length === 1
-                    ? `Enter an amount for ${missingAmounts[0].fullName ?? shortAddr(missingAmounts[0].wallet)}.`
-                    : `Enter amounts for ${missingAmounts.length} selected employees.`}
+                    ? `Enter an amount for ${
+                        missingAmounts[0].full_name ||
+                        shortAddr(missingAmounts[0].worker_address)
+                      }.`
+                    : `Enter amounts for ${missingAmounts.length} workers.`}
                 </p>
               )}
 
-              <div className="mt-5 flex flex-col gap-2">
+              {/* Two-step hint */}
+              <div className="mt-4 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
+                <p className="text-[11px] text-neutral-600 leading-relaxed">
+                  Two transactions: approve USDC, then create streams. USDC
+                  transfers directly into the contract at creation.
+                </p>
+              </div>
+
+              <div className="mt-4">
                 <button
                   onClick={() => void handleSubmit()}
-                  disabled={!canSubmit || submitting}
+                  disabled={!canSubmit || isSubmitting}
                   className="w-full rounded-xl py-3 text-[14px] font-bold text-black transition-all hover:opacity-90 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{ backgroundColor: "#facc15" }}
                 >

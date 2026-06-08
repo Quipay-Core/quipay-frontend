@@ -259,7 +259,7 @@ function DashboardMockup() {
             <div>
               <h1 className="text-[14px] font-bold text-white">Overview</h1>
               <p className="text-[10px] text-neutral-600">
-                May 2026 · Stellar Testnet
+                May 2026 · Arc Testnet
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -477,7 +477,7 @@ function DashboardMockup() {
                   <div className="flex items-center gap-1.5">
                     <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-400" />
                     <p className="font-mono text-[10px] text-neutral-600">
-                      Stellar · Real-time
+                      Arc · Real-time
                     </p>
                   </div>
                 </div>
@@ -671,7 +671,7 @@ const DetectingOverlay: React.FC = () => (
         Checking your account…
       </p>
       <p className="text-[13px] text-neutral-600">
-        Reading on-chain data from Stellar
+        Reading on-chain data from Arc
       </p>
     </div>
   </div>
@@ -838,7 +838,7 @@ const Home: React.FC = () => {
       fetch(`${apiBase}/api/employers/status`, {
         credentials: "include",
         headers: {
-          "x-user-id": address,
+          "x-user-id": address.toLowerCase(),
           "x-user-role": "user",
         },
       })
@@ -1175,7 +1175,7 @@ const Home: React.FC = () => {
                     </svg>
                   ),
                   title: "Audited Contracts",
-                  desc: "Multi-sig smart contract vaults on Stellar. Every transaction on-chain, every penny verifiable.",
+                  desc: "Multi-sig smart contract vaults on Arc. Every transaction on-chain, every penny verifiable.",
                 },
                 {
                   icon: (
@@ -1250,7 +1250,7 @@ const Home: React.FC = () => {
                 {
                   n: "01",
                   title: "Fund Your Treasury",
-                  desc: "Deposit XLM, USDC or any Stellar asset into your audited multi-sig smart contract vault. Full custody, fully on-chain.",
+                  desc: "Deposit USDC into your audited smart contract vault on Arc. Full custody, fully on-chain.",
                   tag: "Secure",
                   icon: (
                     <svg
@@ -1284,7 +1284,7 @@ const Home: React.FC = () => {
                 {
                   n: "03",
                   title: "Workers Claim Anytime",
-                  desc: "Team members withdraw their earned salary 24/7 directly to their Stellar wallet. No payslips, no waiting periods.",
+                  desc: "Team members withdraw their earned salary 24/7 directly to their EVM wallet. No payslips, no waiting periods.",
                   tag: "Instant",
                   icon: (
                     <svg

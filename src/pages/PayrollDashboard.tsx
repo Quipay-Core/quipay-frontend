@@ -17,8 +17,6 @@ import { usePayroll, Stream } from "../hooks/usePayroll";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const STROOPS = 1e7;
-
 function fmt(n: number, decimals = 2) {
   return n.toLocaleString(undefined, {
     minimumFractionDigits: decimals,
@@ -96,7 +94,7 @@ function StatCard({
 export default function PayrollDashboard() {
   const navigate = useNavigate();
   const { address } = useWallet();
-  const { streams, vaultData, isLoading, error } = usePayroll(address);
+  const { streams, isLoading, error } = usePayroll(address);
 
   const activeStreams = streams.filter((s) => s.status === "active");
   const completedStreams = streams.filter((s) => s.status === "completed");
@@ -199,7 +197,7 @@ export default function PayrollDashboard() {
             Payroll
           </h1>
           <p className="mt-1 text-[14px] text-neutral-500">
-            Live data from the Stellar testnet blockchain.
+            Live data from Arc Testnet.
           </p>
         </div>
         <div className="rounded-2xl border border-dashed border-white/[0.08] bg-[#0a0a0a] p-16 text-center">
@@ -245,7 +243,7 @@ export default function PayrollDashboard() {
             Payroll
           </h1>
           <p className="mt-1 text-[14px] text-neutral-500">
-            Live data from the Stellar testnet blockchain.
+            Live data from Arc Testnet.
           </p>
         </div>
         <button
@@ -282,63 +280,6 @@ export default function PayrollDashboard() {
           sub="streamed so far"
         />
       </div>
-
-      {/* Treasury */}
-      {vaultData.length > 0 && (
-        <div className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {vaultData.map((v) => {
-            const bal = Number(v.balance ?? 0) / STROOPS;
-            const liab = Number(v.liability ?? 0) / STROOPS;
-            const avail = Math.max(0, bal - liab);
-            const pct = bal > 0 ? Math.min(100, (liab / bal) * 100) : 0;
-            return (
-              <div
-                key={v.tokenSymbol}
-                className="rounded-2xl border border-white/[0.07] bg-[#0a0a0a] p-5"
-              >
-                <div className="mb-3 flex items-center justify-between">
-                  <p className="text-[13px] font-bold text-white">
-                    Treasury · {v.tokenSymbol}
-                  </p>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${pct > 80 ? "bg-red-500/10 text-red-400" : "bg-green-500/10 text-green-400"}`}
-                  >
-                    {pct > 80 ? "Low" : "Solvent"}
-                  </span>
-                </div>
-                <div className="flex flex-col gap-1.5 text-[12px]">
-                  <div className="flex justify-between">
-                    <span className="text-neutral-600">Balance</span>
-                    <span className="font-bold text-white">{fmt(bal)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-neutral-600">Liability</span>
-                    <span className="font-bold text-red-400">{fmt(liab)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-neutral-600">Available</span>
-                    <span className="font-bold" style={{ color: "#facc15" }}>
-                      {fmt(avail)}
-                    </span>
-                  </div>
-                  <div className="mt-2 h-[3px] w-full rounded-full bg-white/[0.06] overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${pct}%`,
-                        backgroundColor: pct > 80 ? "#ef4444" : "#facc15",
-                      }}
-                    />
-                  </div>
-                  <p className="text-[10px] text-neutral-700">
-                    {pct.toFixed(1)}% committed
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
 
       {/* Charts */}
       {(allocationData.length > 0 || rateBarData.length > 0) && (

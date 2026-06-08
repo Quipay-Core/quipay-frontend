@@ -1,28 +1,41 @@
 /**
- * wagmi + ConnectKit configuration for ARC testnet.
- *
- * ConnectKit provides the wallet connection modal (MetaMask, WalletConnect, Coinbase).
- * wagmi provides React hooks for reading/writing contracts and wallet state.
- *
- * USDC is ARC's native gas token — the chain definition reflects this.
+ * wagmi config wired to ARC testnet via Reown AppKit (WalletConnect).
  */
 
-import { createConfig, http } from "wagmi";
-import { getDefaultConfig } from "connectkit";
+import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
+import { createAppKit } from "@reown/appkit/react";
 import { arcTestnet } from "../contracts/util";
 
-const walletConnectProjectId =
-  (import.meta.env.VITE_WALLETCONNECT_PROJECT_ID as string | undefined) ?? "";
+// Get your own projectId at https://cloud.reown.com
+const projectId =
+  (import.meta.env.VITE_WALLETCONNECT_PROJECT_ID as string) ?? "";
 
-export const wagmiConfig = createConfig(
-  getDefaultConfig({
-    chains: [arcTestnet],
-    transports: {
-      [arcTestnet.id]: http("https://rpc.testnet.arc.network"),
-    },
-    walletConnectProjectId,
-    appName: "Quipay",
-    appDescription: "Real-time payroll streaming on ARC",
-    appUrl: typeof window !== "undefined" ? window.location.origin : "https://quipay.app",
-  }),
-);
+export const wagmiAdapter = new WagmiAdapter({
+  networks: [arcTestnet],
+  projectId,
+  ssr: false,
+});
+
+export const wagmiConfig = wagmiAdapter.wagmiConfig;
+
+createAppKit({
+  adapters: [wagmiAdapter],
+  networks: [arcTestnet],
+  projectId,
+  metadata: {
+    name: "Quipay",
+    description: "Real-time payroll streaming on ARC",
+    url:
+      typeof window !== "undefined"
+        ? window.location.origin
+        : "https://quipay.app",
+    icons: ["/favicon.ico"],
+  },
+  features: {
+    analytics: false,
+    email: false,
+    socials: false,
+    swaps: false,
+    onramp: false,
+  },
+});

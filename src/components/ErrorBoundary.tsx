@@ -72,9 +72,9 @@ const FIX_IT_GUIDES: Record<string, FixItGuide> = {
   "1006": {
     title: "Insufficient Balance",
     steps: [
-      "Check your token balances in the Treasury.",
-      "Add more XLM or the required token to your wallet.",
-      "If using USDC, ensure the trustline is established.",
+      "Check your USDC balance in the Treasury.",
+      "Add more USDC to your wallet from a faucet or exchange.",
+      "Ensure you have approved the contract to spend your USDC.",
     ],
   },
   "1007": {
@@ -89,7 +89,7 @@ const FIX_IT_GUIDES: Record<string, FixItGuide> = {
     title: "Invalid Token",
     steps: [
       "The token address provided is not recognized.",
-      "Ensure you are using a supported Stellar asset.",
+      "Only Arc USDC (0x3600...0000) is supported.",
       "Check the Treasury page for supported tokens.",
     ],
   },
@@ -106,27 +106,25 @@ const FIX_IT_GUIDES: Record<string, FixItGuide> = {
     title: "Network Connection Issue",
     steps: [
       "Check your internet connection.",
-      "The Stellar RPC node may be temporarily down.",
-      "Try switching to a different network in Settings.",
+      "The Arc RPC node may be temporarily down.",
+      "Try switching to a different RPC in Settings.",
       "Wait a few moments and click 'Retry'.",
     ],
   },
   wallet_error: {
     title: "Wallet Issue",
     steps: [
-      "Make sure your wallet extension is installed and unlocked.",
+      "Make sure your EVM wallet (MetaMask or WalletConnect) is installed and unlocked.",
       "Try disconnecting and reconnecting your wallet.",
-      "Ensure your wallet is set to the correct Stellar network.",
-      "If using Freighter, check for pending updates.",
+      "Ensure your wallet is set to the Arc Testnet (chain ID 5042002).",
     ],
   },
-  insufficient_xlm: {
-    title: "Add XLM to Wallet",
+  insufficient_usdc: {
+    title: "Add USDC to Wallet",
     steps: [
-      "You need XLM to pay for transaction fees on Stellar.",
-      "Get testnet XLM from the Stellar Friendbot (testnet only).",
-      "Or transfer XLM from an exchange to your wallet address.",
-      "A minimum of 1 XLM is recommended for fees.",
+      "Arc uses USDC as the native gas and payment token.",
+      "Get testnet USDC from the Circle faucet: https://faucet.circle.com",
+      "Or bridge USDC from another testnet to your wallet address.",
     ],
   },
 };
@@ -174,13 +172,13 @@ function getFixItGuide(error: Error): FixItGuide | null {
   }
   if (
     msg.includes("wallet") ||
-    msg.includes("freighter") ||
-    msg.includes("user rejected")
+    msg.includes("user rejected") ||
+    msg.includes("connector")
   ) {
     return FIX_IT_GUIDES.wallet_error;
   }
-  if (msg.includes("insufficient") && msg.includes("xlm")) {
-    return FIX_IT_GUIDES.insufficient_xlm;
+  if (msg.includes("insufficient") && msg.includes("usdc")) {
+    return FIX_IT_GUIDES.insufficient_usdc;
   }
 
   return null;

@@ -39,6 +39,7 @@ const DashboardCustomization = lazy(
 const StreamTemplates = lazy(() => import("./pages/StreamTemplates"));
 const StreamComparison = lazy(() => import("./pages/StellarOnlyStub"));
 const EmployerOnboarding = lazy(() => import("./pages/EmployerOnboarding"));
+const JoinPage = lazy(() => import("./pages/JoinPage"));
 
 // ─── Public layout (landing page + help) ─────────────────────────────────────
 
@@ -83,15 +84,18 @@ function App() {
       fallback={<div className="p-8 text-center">{t("common.loading")}</div>}
     >
       <Routes>
+        {/* ── Bare routes (no navbar/footer) ── */}
+        <Route path="/onboard" element={<EmployerOnboarding />} />
+
         {/* ── Public routes (site navbar + footer) ── */}
         <Route element={<PublicLayout />}>
           <Route path="/" element={<Home />} />
           <Route path="/about" element={<About />} />
-          <Route path="/onboard" element={<EmployerOnboarding />} />
           <Route path="/help" element={<HelpPage />} />
           <Route path="/ui-primitives" element={<UIPrimitivesPreview />} />
           <Route path="/debug" element={<Debugger />} />
           <Route path="/debug/:contractName" element={<Debugger />} />
+          <Route path="/join" element={<JoinPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
 
