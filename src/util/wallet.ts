@@ -1,6 +1,14 @@
-import { StellarWalletsKit, Networks } from "@creit.tech/stellar-wallets-kit";
+/**
+ * wallet.ts — Stellar wallet utilities using @creit.tech/stellar-wallets-kit v2
+ * https://developers.stellar.org/docs/tools/developer-tools/wallets
+ */
+
+import { StellarWalletsKit } from "@creit.tech/stellar-wallets-kit/sdk";
+import { Networks } from "@creit.tech/stellar-wallets-kit";
 import { FreighterModule } from "@creit.tech/stellar-wallets-kit/modules/freighter";
 import { xBullModule } from "@creit.tech/stellar-wallets-kit/modules/xbull";
+import { AlbedoModule } from "@creit.tech/stellar-wallets-kit/modules/albedo";
+import { LobstrModule } from "@creit.tech/stellar-wallets-kit/modules/lobstr";
 import {
   HORIZON_URL,
   networkPassphrase,
@@ -13,13 +21,24 @@ export type MappedBalances = Record<
   { balance: string; assetCode: string }
 >;
 
+// ─── Kit initialization ───────────────────────────────────────────────────────
+// Registers all default Stellar wallets (Freighter, xBull, Albedo, Lobstr).
+// All StellarWalletsKit methods are static — export the class itself as `kit`.
+
 StellarWalletsKit.init({
-  modules: [new FreighterModule(), new xBullModule()],
+  modules: [
+    new FreighterModule(),
+    new xBullModule(),
+    new AlbedoModule(),
+    new LobstrModule(),
+  ],
   network: Networks.TESTNET,
 });
 
-// All methods on StellarWalletsKit v2 are static — export the class itself.
 export const kit = StellarWalletsKit;
+export { KitEventType } from "@creit.tech/stellar-wallets-kit";
+
+// ─── Balance fetching via Horizon ─────────────────────────────────────────────
 
 interface HorizonBalance {
   asset_type: string;
@@ -50,6 +69,8 @@ export async function fetchBalances(address: string): Promise<MappedBalances> {
     return {};
   }
 }
+
+// ─── Transaction signing ──────────────────────────────────────────────────────
 
 export async function signTransaction(
   xdr: string,

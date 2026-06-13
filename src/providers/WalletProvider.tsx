@@ -1,7 +1,7 @@
 /**
- * WalletProvider — Stellar wallet state via @creit.tech/stellar-wallets-kit.
- *
- * Keeps the same WalletContext shape so all existing consumers compile unchanged.
+ * WalletProvider — Stellar wallet state via @creit.tech/stellar-wallets-kit v2.
+ * Uses event-based listeners (StellarWalletsKit.on) instead of polling.
+ * https://developers.stellar.org/docs/tools/developer-tools/wallets
  */
 
 import {
@@ -12,7 +12,12 @@ import {
   useState,
   useTransition,
 } from "react";
-import { kit, fetchBalances, signTransaction } from "../util/wallet";
+import {
+  kit,
+  fetchBalances,
+  signTransaction,
+  KitEventType,
+} from "../util/wallet";
 import type { MappedBalances } from "../util/wallet";
 import { networkPassphrase } from "../contracts/util";
 
@@ -68,24 +73,28 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     });
   }, [updateBalances]);
 
-  // Listen for wallet kit address changes (e.g. user switches account in Freighter)
+  // Event-based address tracking — no polling needed.
   useEffect(() => {
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const { address: addr } = await kit.getAddress();
-        if (!cancelled) setAddress(addr || undefined);
-      } catch {
-        // Wallet not connected yet — that's fine
-      }
-    };
-    void poll();
-    const id = setInterval(() => {
-      void poll();
-    }, 3000);
+    // Restore previously connected address on mount.
+    void kit
+      .getAddress()
+      .then(({ address: addr }) => setAddress(addr || undefined))
+      .catch(() => {});
+
+    // STATE_UPDATED fires when user connects or switches accounts.
+    const unsubUpdate = kit.on(KitEventType.STATE_UPDATED, (event) => {
+      setAddress(event.payload.address || undefined);
+    });
+
+    // DISCONNECT fires when user disconnects.
+    const unsubDisconnect = kit.on(KitEventType.DISCONNECT, () => {
+      setAddress(undefined);
+      setBalances({});
+    });
+
     return () => {
-      cancelled = true;
-      clearInterval(id);
+      unsubUpdate();
+      unsubDisconnect();
     };
   }, []);
 
@@ -112,7 +121,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       clearError,
       disconnect,
       accounts: address ? [address] : [],
-      switchAccount: () => {}, // handled by wallet extension itself
+      switchAccount: () => {},
     }),
     [
       address,

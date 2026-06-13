@@ -55,7 +55,11 @@ export const WalletButton = () => {
           aria-label={t("wallet.connect")}
           onClick={() => {
             clearError();
-            void kit.authModal();
+            // authModal() shows the wallet picker and returns {address} on success.
+            // WalletProvider's STATE_UPDATED listener updates state automatically.
+            void kit.authModal().catch((err: unknown) => {
+              if (err instanceof Error) clearError();
+            });
           }}
           className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-transparent px-4 py-[7px] text-[13px] font-medium text-white/80 transition-all duration-150 hover:border-white/30 hover:bg-white/[0.05] hover:text-white"
         >
