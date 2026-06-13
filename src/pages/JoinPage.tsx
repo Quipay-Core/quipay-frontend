@@ -243,7 +243,7 @@ export default function JoinPage() {
             </div>
 
             <button
-              onClick={() => void kit.fetchAddress()}
+              onClick={() => void kit.authModal()}
               className="w-full rounded-2xl py-4 text-[15px] font-bold text-black transition-all hover:opacity-90 active:scale-[0.98]"
               style={{ backgroundColor: "#facc15" }}
             >

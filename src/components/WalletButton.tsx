@@ -55,7 +55,7 @@ export const WalletButton = () => {
           aria-label={t("wallet.connect")}
           onClick={() => {
             clearError();
-            void kit.fetchAddress().catch((err: unknown) => {
+            void kit.authModal().catch((err: unknown) => {
               if (err instanceof Error) clearError();
             });
           }}

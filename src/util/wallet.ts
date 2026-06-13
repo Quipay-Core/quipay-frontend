@@ -1,9 +1,9 @@
 import { StellarWalletsKit } from "@creit-tech/stellar-wallets-kit/sdk";
 import { Networks } from "@creit-tech/stellar-wallets-kit";
-import {
-  FreighterModule,
-  FREIGHTER_ID,
-} from "@creit-tech/stellar-wallets-kit/modules/freighter";
+import { FreighterModule } from "@creit-tech/stellar-wallets-kit/modules/freighter";
+import { xBullModule } from "@creit-tech/stellar-wallets-kit/modules/xbull";
+import { AlbedoModule } from "@creit-tech/stellar-wallets-kit/modules/albedo";
+import { LobstrModule } from "@creit-tech/stellar-wallets-kit/modules/lobstr";
 import {
   HORIZON_URL,
   networkPassphrase,
@@ -17,15 +17,17 @@ export type MappedBalances = Record<
 >;
 
 StellarWalletsKit.init({
-  modules: [new FreighterModule()],
+  modules: [
+    new FreighterModule(),
+    new xBullModule(),
+    new AlbedoModule(),
+    new LobstrModule(),
+  ],
   network: Networks.TESTNET,
-  selectedWalletId: FREIGHTER_ID,
 });
 
 export const kit = StellarWalletsKit;
 export { KitEventType } from "@creit-tech/stellar-wallets-kit";
-
-export const connectWallet = () => StellarWalletsKit.fetchAddress();
 
 // ─── Balance fetching via Horizon ─────────────────────────────────────────────
 
