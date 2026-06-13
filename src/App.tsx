@@ -107,6 +107,7 @@ function App() {
             <Route path="/debug" element={<Debugger />} />
             <Route path="/debug/:contractName" element={<Debugger />} />
             <Route path="/join" element={<JoinPage />} />
+            <Route path="/join/:token" element={<JoinPage />} />
             <Route path="*" element={<NotFound />} />
           </Route>
 
