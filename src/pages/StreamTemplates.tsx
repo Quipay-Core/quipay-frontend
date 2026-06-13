@@ -140,7 +140,7 @@ const StreamTemplates: React.FC = () => {
                 variant="primary"
                 size="sm"
                 onClick={() => {
-                  void navigate("/create-stream");
+                  void navigate("/employer/create-stream");
                 }}
               >
                 Create New Stream
@@ -231,7 +231,7 @@ const StreamTemplates: React.FC = () => {
                     size="sm"
                     className="w-full justify-center"
                     onClick={() => {
-                      void navigate("/create-stream", {
+                      void navigate("/employer/create-stream", {
                         state: { templateId: template.id },
                       });
                     }}

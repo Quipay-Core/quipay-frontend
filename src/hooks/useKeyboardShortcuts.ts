@@ -28,19 +28,19 @@ export const useKeyboardShortcuts = () => {
       switch (event.key.toLowerCase()) {
         case "n":
           event.preventDefault();
-          void navigate("/create-stream");
+          void navigate("/employer/create-stream");
           break;
         case "d":
           event.preventDefault();
-          void navigate("/dashboard");
+          void navigate("/employer/dashboard");
           break;
         case "w":
           event.preventDefault();
-          void navigate("/withdraw");
+          void navigate("/employer/withdraw");
           break;
         case ",":
           event.preventDefault();
-          void navigate("/settings");
+          void navigate("/employer/settings");
           break;
         case "/":
           event.preventDefault();

@@ -308,7 +308,7 @@ export default function JoinPage() {
               ))}
             </div>
             <Link
-              to="/worker"
+              to="/employee/dashboard"
               className="flex w-full items-center justify-center gap-2 rounded-2xl py-4 text-[15px] font-bold text-black transition-all hover:opacity-90"
               style={{ backgroundColor: "#facc15" }}
             >

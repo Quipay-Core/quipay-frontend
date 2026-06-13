@@ -222,7 +222,7 @@ const TreasuryManager: React.FC = () => {
           </p>
         </div>
         <button
-          onClick={() => void navigate("/create-stream")}
+          onClick={() => void navigate("/employer/create-stream")}
           className="inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-bold text-black hover:opacity-90 transition-all"
           style={{ backgroundColor: "#facc15" }}
         >
@@ -368,7 +368,7 @@ const TreasuryManager: React.FC = () => {
                   Create your first payroll stream to start funding workers.
                 </p>
                 <button
-                  onClick={() => void navigate("/create-stream")}
+                  onClick={() => void navigate("/employer/create-stream")}
                   className="rounded-xl px-5 py-2.5 text-[14px] font-bold text-black hover:opacity-90 transition-all"
                   style={{ backgroundColor: "#facc15" }}
                 >

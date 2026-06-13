@@ -216,7 +216,7 @@ function WorkforcePanel({
           </p>
         </div>
         <button
-          onClick={() => void navigate("/workforce")}
+          onClick={() => void navigate("/employer/workforce")}
           className="text-[12px] font-semibold transition-colors hover:text-white"
           style={{ color: "#facc15" }}
         >
@@ -269,7 +269,7 @@ function WorkforcePanel({
         })}
         {employees.length > 5 && (
           <button
-            onClick={() => void navigate("/workforce")}
+            onClick={() => void navigate("/employer/workforce")}
             className="rounded-2xl border border-dashed border-white/[0.07] py-3 text-[13px] font-semibold text-neutral-600 transition-colors hover:text-white"
           >
             +{employees.length - 5} more in workforce →
@@ -320,7 +320,7 @@ const EmployerDashboard: React.FC = () => {
         <SeoHelmet
           title={t("dashboard.title")}
           description={seoDescription}
-          path="/dashboard"
+          path="/employer/dashboard"
           robots="noindex,nofollow"
         />
         <div className="px-6 py-8 sm:px-8 sm:py-10">
@@ -351,7 +351,7 @@ const EmployerDashboard: React.FC = () => {
       <SeoHelmet
         title={t("dashboard.title")}
         description={seoDescription}
-        path="/dashboard"
+        path="/employer/dashboard"
         robots="noindex,nofollow"
       />
 
@@ -367,7 +367,7 @@ const EmployerDashboard: React.FC = () => {
             </p>
           </div>
           <button
-            onClick={() => void navigate("/create-stream")}
+            onClick={() => void navigate("/employer/create-stream")}
             className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-[13px] font-bold text-black transition-colors hover:opacity-90 shrink-0"
             style={{ backgroundColor: "#facc15" }}
           >
@@ -406,7 +406,7 @@ const EmployerDashboard: React.FC = () => {
             accent
             action={{
               label: t("dashboard.manage_treasury"),
-              onClick: () => void navigate("/treasury-management"),
+              onClick: () => void navigate("/employer/treasury"),
             }}
           />
           <StatCard
@@ -415,7 +415,7 @@ const EmployerDashboard: React.FC = () => {
             sub={`${activeStreamsCount ?? 0} streaming right now`}
             action={{
               label: "View payroll →",
-              onClick: () => void navigate("/payroll"),
+              onClick: () => void navigate("/employer/payroll"),
             }}
           />
           <StatCard
@@ -424,7 +424,7 @@ const EmployerDashboard: React.FC = () => {
             sub="All time"
             action={{
               label: "New stream →",
-              onClick: () => void navigate("/create-stream"),
+              onClick: () => void navigate("/employer/create-stream"),
             }}
           />
         </div>
@@ -452,7 +452,7 @@ const EmployerDashboard: React.FC = () => {
                 description={t("dashboard.no_streams_description")}
                 variant="streams"
                 actionLabel={t("dashboard.create_new_stream")}
-                onAction={() => void navigate("/create-stream")}
+                onAction={() => void navigate("/employer/create-stream")}
               />
             </div>
           ) : (

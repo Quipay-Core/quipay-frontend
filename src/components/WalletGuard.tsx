@@ -1,26 +1,36 @@
-import React, { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useWallet } from "../hooks/useWallet";
+import { useRole } from "../context/RoleContext";
 
 interface WalletGuardProps {
-  children: ReactNode;
+  children: React.ReactNode;
 }
 
-/**
- * A higher-order component that protects routes by checking for a connected wallet.
- * If no wallet is connected, it redirects to the home page.
- */
-const WalletGuard: React.FC<WalletGuardProps> = ({ children }) => {
+export default function WalletGuard({ children }: WalletGuardProps) {
   const { address } = useWallet();
+  const { isDetecting, roles } = useRole();
   const location = useLocation();
 
   if (!address) {
-    // If the wallet is not connected, redirect to the home page.
-    // We could also show a "Connect your wallet" modal here instead.
     return <Navigate to="/" state={{ from: location }} replace />;
   }
 
-  return <>{children}</>;
-};
+  if (isDetecting) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-black">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 rounded-full animate-spin border-white/10 border-t-yellow-400" />
+          <p className="text-[12px] font-medium text-neutral-600">
+            Checking your profile…
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-export default WalletGuard;
+  if (roles.length === 0) {
+    return <Navigate to="/select-role" state={{ from: location }} replace />;
+  }
+
+  return <>{children}</>;
+}

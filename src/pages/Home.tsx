@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { formatCurrency } from "../util/formatters";
 import { useWallet } from "../hooks/useWallet";
-import { useRoleDetect } from "../hooks/useRoleDetect";
+import { useRole } from "../context/RoleContext";
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
 
@@ -677,195 +677,39 @@ const DetectingOverlay: React.FC = () => (
   </div>
 );
 
-// ─── First-time onboarding (new users only) ───────────────────────────────────
-
-const Onboarding: React.FC<{
-  onChoose: (r: "employer" | "worker") => void;
-}> = ({ onChoose }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-sm px-4">
-    <div className="w-full max-w-lg rounded-2xl border border-white/[0.1] bg-[#111] shadow-2xl overflow-hidden">
-      {/* Yellow accent top */}
-      <div className="h-[3px]" style={{ background: "#facc15" }} />
-
-      <div className="p-8">
-        {/* Logo */}
-        <div className="mb-6 flex items-center justify-center gap-2.5">
-          <div
-            className="h-8 w-8 rounded-xl"
-            style={{
-              backgroundColor: "#facc15",
-              WebkitMaskImage: "url('/quipay-icon-mark.png')",
-              WebkitMaskSize: "contain",
-              WebkitMaskRepeat: "no-repeat",
-              WebkitMaskPosition: "center",
-              maskImage: "url('/quipay-icon-mark.png')",
-              maskSize: "contain",
-              maskRepeat: "no-repeat",
-            }}
-          />
-          <span
-            className="text-[20px] font-bold text-white"
-            style={{ letterSpacing: "-0.02em" }}
-          >
-            Quipay
-          </span>
-        </div>
-
-        <h2 className="mb-2 text-center text-[22px] font-black text-white tracking-tight">
-          Welcome to Quipay
-        </h2>
-        <p className="mb-8 text-center text-[14px] text-neutral-500">
-          How will you use this account?
-        </p>
-
-        <div className="flex flex-col gap-3">
-          {/* Employer */}
-          <button
-            onClick={() => onChoose("employer")}
-            className="group flex items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 text-left transition-all hover:border-yellow-400/30 hover:bg-yellow-400/[0.04]"
-          >
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-yellow-400/10 group-hover:bg-yellow-400/20 transition-colors">
-              <svg
-                className="h-6 w-6 text-yellow-400"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-              >
-                <rect x="2" y="7" width="20" height="14" rx="2" />
-                <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
-                <line x1="12" y1="12" x2="12" y2="16" />
-                <line x1="10" y1="14" x2="14" y2="14" />
-              </svg>
-            </div>
-            <div className="flex-1">
-              <p className="text-[15px] font-bold text-white">
-                I'm an Employer
-              </p>
-              <p className="text-[13px] text-neutral-500 mt-0.5">
-                I pay workers — I'll create streams and manage my payroll vault
-              </p>
-            </div>
-            <svg
-              className="h-5 w-5 shrink-0 text-neutral-700 group-hover:text-yellow-400 transition-colors"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-            >
-              <path d="M9 18l6-6-6-6" />
-            </svg>
-          </button>
-
-          {/* Worker */}
-          <button
-            onClick={() => onChoose("worker")}
-            className="group flex items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 text-left transition-all hover:border-yellow-400/30 hover:bg-yellow-400/[0.04]"
-          >
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-yellow-400/10 group-hover:bg-yellow-400/20 transition-colors">
-              <svg
-                className="h-6 w-6 text-yellow-400"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-              >
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
-            </div>
-            <div className="flex-1">
-              <p className="text-[15px] font-bold text-white">I'm a Worker</p>
-              <p className="text-[13px] text-neutral-500 mt-0.5">
-                I get paid — I'll register with my employer and track my
-                earnings
-              </p>
-            </div>
-            <svg
-              className="h-5 w-5 shrink-0 text-neutral-700 group-hover:text-yellow-400 transition-colors"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-            >
-              <path d="M9 18l6-6-6-6" />
-            </svg>
-          </button>
-        </div>
-
-        <p className="mt-5 text-center text-[11px] text-neutral-700">
-          Your role is determined by your on-chain activity and cannot be shared
-          between accounts. Use separate wallets for each role.
-        </p>
-      </div>
-    </div>
-  </div>
-);
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const Home: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { address } = useWallet();
-  const { role, isDetecting, forceRole } = useRoleDetect(address);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  // Prevents the useEffect from re-running the KYB check when the user
-  // just picked their role from the modal (forceRole triggers role change).
-  const userJustChoseRole = useRef(false);
+  const { roles, isDetecting } = useRole();
 
   useEffect(() => {
-    if (!address) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setShowOnboarding(false);
-      return;
-    }
-    if (isDetecting) return;
+    if (!address || isDetecting) return;
 
-    // If the user manually chose their role, navigation is already handled
-    // in handleOnboardingChoice — don't override it here.
-    if (userJustChoseRole.current) {
-      userJustChoseRole.current = false;
-      return;
-    }
-
-    if (role === "employer") {
+    if (roles.includes("employer")) {
       const apiBase = import.meta.env.VITE_API_BASE_URL ?? "";
       fetch(`${apiBase}/api/employers/status`, {
         credentials: "include",
-        headers: {
-          "x-user-id": address.toLowerCase(),
-          "x-user-role": "user",
-        },
+        headers: { "x-user-id": address.toLowerCase(), "x-user-role": "user" },
       })
         .then((r) => r.json())
         .then((data) => {
           if (data.status === "not_started") {
             void navigate("/onboard", { replace: true });
           } else {
-            void navigate("/dashboard", { replace: true });
+            void navigate("/employer/dashboard", { replace: true });
           }
         })
-        .catch(() => void navigate("/dashboard", { replace: true }));
-    } else if (role === "worker") {
-      void navigate("/worker", { replace: true });
+        .catch(() => void navigate("/employer/dashboard", { replace: true }));
+    } else if (roles.includes("worker")) {
+      void navigate("/employee/dashboard", { replace: true });
     } else {
-      // New user — no on-chain history yet, let them choose
-      setShowOnboarding(true);
+      // New user — redirect to the dedicated role chooser page
+      void navigate("/select-role", { replace: true });
     }
-  }, [address, role, isDetecting, navigate]);
-
-  const handleOnboardingChoice = (chosen: "employer" | "worker") => {
-    userJustChoseRole.current = true;
-    forceRole(chosen);
-    setShowOnboarding(false);
-    if (chosen === "employer") void navigate("/onboard", { replace: true });
-    else void navigate("/worker", { replace: true });
-  };
+  }, [address, roles, isDetecting, navigate]);
 
   const stats = useMemo<StatMetric[]>(
     () => [
@@ -942,11 +786,6 @@ const Home: React.FC = () => {
       {/* ── Detecting overlay ────────────────────────────────── */}
       {address && isDetecting && <DetectingOverlay />}
 
-      {/* ── First-time onboarding ─────────────────────────────── */}
-      {showOnboarding && !isDetecting && (
-        <Onboarding onChoose={handleOnboardingChoice} />
-      )}
-
       {/* ── Subtle grid ──────────────────────────────────────────── */}
       <div
         className="fixed inset-0 z-0 pointer-events-none"
@@ -996,7 +835,7 @@ const Home: React.FC = () => {
             <div className="flex flex-col items-start gap-10 sm:flex-row sm:items-center">
               {/* Primary pill button */}
               <button
-                onClick={() => (window.location.href = "/dashboard")}
+                onClick={() => (window.location.href = "/employer/dashboard")}
                 className="inline-flex items-center justify-center rounded-full font-bold  bg-[#facc15] transition-all hover:opacity-90 active:scale-[0.97] shrink-0 px-10 py-4 text-[15px] text-black"
                 // style={{ padding: "16px 28px", fontSize: "1rem", letterSpacing: "-0.01em", backgroundColor: "#facc15" }}
               >
@@ -1419,7 +1258,7 @@ const Home: React.FC = () => {
             </p>
             <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link
-                to="/dashboard"
+                to="/employer/dashboard"
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 rounded-xl bg-yellow-400 px-10 py-4 text-[15px] font-bold text-black transition-all hover:bg-yellow-300 hover:-translate-y-[1px] active:scale-[0.98]"
               >
                 {t("home.launch_app")}

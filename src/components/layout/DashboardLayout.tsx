@@ -1,18 +1,16 @@
 import { useState, useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useWallet } from "../../hooks/useWallet";
-import { useRoleDetect } from "../../hooks/useRoleDetect";
+import { useRole } from "../../context/RoleContext";
 import { Suspense } from "react";
 import NotificationCenter from "../NotificationCenter";
 
-// ─── Nav config ────────────────────────────────────────────────────────────────
+// ─── Nav configs ───────────────────────────────────────────────────────────────
 
-// ── Worker nav (simple — just their own pages) ────────────────────────────────
-
-const WORKER_MAIN_NAV = [
+const EMPLOYEE_NAV = [
   {
     label: "My Earnings",
-    to: "/worker",
+    to: "/employee/dashboard",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -28,7 +26,7 @@ const WORKER_MAIN_NAV = [
   },
   {
     label: "Withdraw",
-    to: "/withdraw",
+    to: "/employee/withdraw",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -45,7 +43,7 @@ const WORKER_MAIN_NAV = [
   },
   {
     label: "Transactions",
-    to: "/transactions",
+    to: "/employee/transactions",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -64,7 +62,7 @@ const WORKER_MAIN_NAV = [
   },
   {
     label: "Settings",
-    to: "/settings",
+    to: "/employee/settings",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -80,12 +78,10 @@ const WORKER_MAIN_NAV = [
   },
 ] as const;
 
-// ── Employer nav ──────────────────────────────────────────────────────────────
-
-const MAIN_NAV = [
+const EMPLOYER_MAIN_NAV = [
   {
     label: "Overview",
-    to: "/dashboard",
+    to: "/employer/dashboard",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -103,7 +99,7 @@ const MAIN_NAV = [
   },
   {
     label: "Payroll",
-    to: "/payroll",
+    to: "/employer/payroll",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -121,7 +117,7 @@ const MAIN_NAV = [
   },
   {
     label: "Create Stream",
-    to: "/create-stream",
+    to: "/employer/create-stream",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -138,7 +134,7 @@ const MAIN_NAV = [
   },
   {
     label: "Treasury",
-    to: "/treasury-management",
+    to: "/employer/treasury",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -153,7 +149,7 @@ const MAIN_NAV = [
   },
   {
     label: "Workforce",
-    to: "/workforce",
+    to: "/employer/workforce",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -171,10 +167,10 @@ const MAIN_NAV = [
   },
 ] as const;
 
-const ANALYTICS_NAV = [
+const EMPLOYER_ANALYTICS_NAV = [
   {
     label: "Analytics",
-    to: "/analytics",
+    to: "/employer/analytics",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -194,7 +190,7 @@ const ANALYTICS_NAV = [
   },
   {
     label: "Reports",
-    to: "/reports",
+    to: "/employer/reports",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -210,7 +206,7 @@ const ANALYTICS_NAV = [
   },
   {
     label: "Treasury Analytics",
-    to: "/treasury-analytics",
+    to: "/employer/treasury-analytics",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -226,10 +222,10 @@ const ANALYTICS_NAV = [
   },
 ] as const;
 
-const TOOLS_NAV = [
+const EMPLOYER_TOOLS_NAV = [
   {
     label: "Governance",
-    to: "/governance",
+    to: "/employer/governance",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -245,7 +241,7 @@ const TOOLS_NAV = [
   },
   {
     label: "Address Book",
-    to: "/address-book",
+    to: "/employer/address-book",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -261,7 +257,7 @@ const TOOLS_NAV = [
   },
   {
     label: "Templates",
-    to: "/templates",
+    to: "/employer/templates",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -277,7 +273,7 @@ const TOOLS_NAV = [
   },
   {
     label: "Withdraw",
-    to: "/withdraw",
+    to: "/employer/withdraw",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -294,7 +290,7 @@ const TOOLS_NAV = [
   },
   {
     label: "Settings",
-    to: "/settings",
+    to: "/employer/settings",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -323,7 +319,7 @@ function DashboardLoadingFallback() {
   );
 }
 
-// ─── Sidebar nav section ───────────────────────────────────────────────────────
+// ─── Nav section ──────────────────────────────────────────────────────────────
 
 function NavSection({
   label,
@@ -350,7 +346,7 @@ function NavSection({
         <NavLink
           key={item.to}
           to={item.to}
-          end={item.to === "/dashboard"}
+          end={item.to.endsWith("/dashboard")}
           className={({ isActive }) =>
             `relative flex items-center gap-3 rounded-lg px-3 py-3 text-[15px] font-medium transition-all duration-150 mb-0.5 ${
               isActive
@@ -388,20 +384,91 @@ function NavSection({
   );
 }
 
+// ─── Role switcher ─────────────────────────────────────────────────────────────
+
+function RoleSwitcher({
+  view,
+  collapsed,
+}: {
+  view: "employer" | "employee";
+  collapsed: boolean;
+}) {
+  const navigate = useNavigate();
+  const { setActiveView } = useRole();
+
+  function switchTo(next: "employer" | "employee") {
+    setActiveView(next);
+    void navigate(
+      next === "employer" ? "/employer/dashboard" : "/employee/dashboard",
+    );
+  }
+
+  if (collapsed) {
+    const next = view === "employer" ? "employee" : "employer";
+    return (
+      <button
+        onClick={() => switchTo(next)}
+        title={`Switch to ${next} view`}
+        className="flex w-full justify-center rounded-lg p-2 text-neutral-600 hover:bg-white/[0.05] hover:text-neutral-300 transition-colors mb-1"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          className="w-4 h-4"
+        >
+          <path
+            d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"
+            strokeLinecap="round"
+          />
+        </svg>
+      </button>
+    );
+  }
+
+  return (
+    <div className="mx-2 mb-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-1 flex">
+      <button
+        onClick={() => switchTo("employer")}
+        className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide transition-all ${
+          view === "employer"
+            ? "bg-yellow-400/10 text-yellow-400"
+            : "text-neutral-600 hover:text-neutral-400"
+        }`}
+      >
+        Employer
+      </button>
+      <button
+        onClick={() => switchTo("employee")}
+        className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide transition-all ${
+          view === "employee"
+            ? "bg-blue-500/10 text-blue-400"
+            : "text-neutral-600 hover:text-neutral-400"
+        }`}
+      >
+        Employee
+      </button>
+    </div>
+  );
+}
+
 // ─── Sidebar content ──────────────────────────────────────────────────────────
 
 function SidebarContent({
   collapsed,
   address,
   shortAddr,
-  role,
+  view,
+  hasBothRoles,
   setCollapsed,
   onDisconnect,
 }: {
   collapsed: boolean;
   address: string | undefined;
   shortAddr: string;
-  role: string;
+  view: "employer" | "employee";
+  hasBothRoles: boolean;
   setCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
   onDisconnect: () => void;
 }) {
@@ -411,7 +478,6 @@ function SidebarContent({
       <div
         className={`flex items-center border-b border-white/[0.05] ${collapsed ? "justify-center px-0 py-[14px]" : "gap-2.5 px-4 py-[14px]"}`}
       >
-        {/* Icon mark — same mask-image technique as Navbar */}
         <div
           className="w-8 h-8 shrink-0"
           style={{
@@ -438,43 +504,52 @@ function SidebarContent({
 
       {/* Nav */}
       <div className="flex-1 px-2 py-3 overflow-y-auto scrollbar-none">
-        {role === "worker" ? (
-          /* ── Worker view — simple ── */
-          <NavSection items={WORKER_MAIN_NAV} collapsed={collapsed} />
+        {view === "employee" ? (
+          <NavSection items={EMPLOYEE_NAV} collapsed={collapsed} />
         ) : (
-          /* ── Employer view — full ── */
           <>
-            <NavSection items={MAIN_NAV} collapsed={collapsed} />
+            <NavSection items={EMPLOYER_MAIN_NAV} collapsed={collapsed} />
             <div className="my-2 border-t border-white/[0.05]" />
             <NavSection
               label="Analytics"
-              items={ANALYTICS_NAV}
+              items={EMPLOYER_ANALYTICS_NAV}
               collapsed={collapsed}
             />
             <div className="my-2 border-t border-white/[0.05]" />
-            <NavSection label="Tools" items={TOOLS_NAV} collapsed={collapsed} />
+            <NavSection
+              label="Tools"
+              items={EMPLOYER_TOOLS_NAV}
+              collapsed={collapsed}
+            />
           </>
         )}
       </div>
 
-      {/* Role badge — visible when expanded */}
-      {!collapsed && (
+      {/* Role switcher — only shown when wallet has both roles */}
+      {hasBothRoles && (
+        <>
+          <div className="mx-2 mb-1 border-t border-white/[0.05]" />
+          <RoleSwitcher view={view} collapsed={collapsed} />
+        </>
+      )}
+
+      {/* Role badge */}
+      {!collapsed && !hasBothRoles && (
         <div className="px-4 pb-1">
           <span
             className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest ${
-              role === "worker"
+              view === "employee"
                 ? "bg-blue-500/10 text-blue-400"
                 : "bg-yellow-400/10 text-yellow-400"
             }`}
           >
-            {role === "worker" ? "Worker" : "Employer"}
+            {view === "employee" ? "Employee" : "Employer"}
           </span>
         </div>
       )}
 
-      {/* Bottom: user + actions */}
+      {/* Bottom: collapse toggle + user */}
       <div className="border-t border-white/[0.05] p-2">
-        {/* Collapse toggle — desktop only */}
         <button
           onClick={() => setCollapsed((v) => !v)}
           className={`hidden md:flex mb-2 w-full items-center gap-2 rounded-lg px-3 py-2.5 text-[14px] font-medium text-neutral-600 hover:bg-white/[0.04] hover:text-neutral-400 transition-colors ${collapsed ? "justify-center" : ""}`}
@@ -495,7 +570,6 @@ function SidebarContent({
           {!collapsed && <span>Collapse</span>}
         </button>
 
-        {/* User pill */}
         {address ? (
           <div
             className={`flex items-center gap-2.5 rounded-lg px-2 py-2 ${collapsed ? "justify-center" : ""}`}
@@ -528,12 +602,18 @@ function SidebarContent({
 
 // ─── Dashboard Layout ──────────────────────────────────────────────────────────
 
-export default function DashboardLayout() {
+export default function DashboardLayout({
+  view,
+}: {
+  view: "employer" | "employee";
+}) {
   const navigate = useNavigate();
   const { address, disconnect } = useWallet();
-  const { role, resetRole: clearRole } = useRoleDetect(address);
+  const { roles, resetRoles } = useRole();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const hasBothRoles = roles.includes("employer") && roles.includes("worker");
 
   useEffect(() => {
     const fn = () => {
@@ -547,14 +627,17 @@ export default function DashboardLayout() {
     ? `${address.slice(0, 6)}...${address.slice(-4)}`
     : "";
   const sidebarWidth = collapsed ? 56 : 220;
+
   const handleDisconnect = () => {
-    clearRole();
+    resetRoles();
     void disconnect().then(() => navigate("/"));
   };
 
+  const newStreamPath = "/employer/create-stream";
+
   return (
     <div className="flex h-screen overflow-hidden text-white bg-black">
-      {/* ── Desktop sidebar ── */}
+      {/* Desktop sidebar */}
       <aside
         className="hidden md:flex flex-col shrink-0 border-r border-white/[0.06] transition-all duration-200 overflow-hidden"
         style={{ width: sidebarWidth }}
@@ -563,13 +646,14 @@ export default function DashboardLayout() {
           collapsed={collapsed}
           address={address}
           shortAddr={shortAddr}
+          view={view}
+          hasBothRoles={hasBothRoles}
           setCollapsed={setCollapsed}
-          role={role}
           onDisconnect={handleDisconnect}
         />
       </aside>
 
-      {/* ── Mobile overlay ── */}
+      {/* Mobile overlay */}
       {mobileOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm md:hidden"
@@ -577,27 +661,24 @@ export default function DashboardLayout() {
         />
       )}
 
-      {/* ── Mobile sidebar ── */}
+      {/* Mobile sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[220px] flex-col border-r border-white/[0.06] transition-transform duration-250 md:hidden ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed inset-y-0 left-0 z-50 flex w-[220px] flex-col border-r border-white/[0.06] transition-transform duration-250 md:hidden ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
         <SidebarContent
-          collapsed={collapsed}
+          collapsed={false}
           address={address}
           shortAddr={shortAddr}
+          view={view}
+          hasBothRoles={hasBothRoles}
           setCollapsed={setCollapsed}
-          role={role}
           onDisconnect={handleDisconnect}
         />
       </aside>
 
-      {/* ── Main content ── */}
+      {/* Main content */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        {/* Top bar */}
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/[0.06] bg-black/90 px-4 sm:px-6 backdrop-blur-md">
-          {/* Mobile hamburger */}
           <button
             onClick={() => setMobileOpen((v) => !v)}
             className="flex h-8 w-8 md:hidden items-center justify-center rounded-lg hover:bg-white/[0.06] transition-colors"
@@ -613,33 +694,31 @@ export default function DashboardLayout() {
             </svg>
           </button>
 
-          {/* Breadcrumb / page title area (empty — pages set their own h1) */}
           <div className="hidden md:block" />
 
-          {/* Right actions */}
           <div className="flex items-center gap-2 ml-auto">
             <NotificationCenter />
-
-            <button
-              className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[12px] font-bold text-black transition-all hover:opacity-90 active:scale-[0.97]"
-              style={{ backgroundColor: "#facc15" }}
-              onClick={() => void navigate("/create-stream")}
-            >
-              <svg
-                className="w-3 h-3"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
+            {view === "employer" && (
+              <button
+                className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[12px] font-bold text-black transition-all hover:opacity-90 active:scale-[0.97]"
+                style={{ backgroundColor: "#facc15" }}
+                onClick={() => void navigate(newStreamPath)}
               >
-                <path d="M12 5v14M5 12h14" strokeLinecap="round" />
-              </svg>
-              New Stream
-            </button>
+                <svg
+                  className="w-3 h-3"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                >
+                  <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+                </svg>
+                New Stream
+              </button>
+            )}
           </div>
         </header>
 
-        {/* Page content */}
         <main className="flex-1 overflow-y-auto bg-black">
           <Suspense fallback={<DashboardLoadingFallback />}>
             <Outlet />

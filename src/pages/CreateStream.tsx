@@ -249,7 +249,7 @@ const CreateStream: React.FC = () => {
         `${selectedWorkers.length} stream${selectedWorkers.length !== 1 ? "s" : ""} created!`,
         "success",
       );
-      void navigate("/workforce");
+      void navigate("/employer/workforce");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Transaction failed";
       setTxError(msg.length > 200 ? msg.slice(0, 200) + "…" : msg);
@@ -314,7 +314,7 @@ const CreateStream: React.FC = () => {
       <SeoHelmet
         title="Create Streams · Quipay"
         description="Set up payroll streams for your workers on Arc."
-        path="/create-stream"
+        path="/employer/create-stream"
         robots="noindex,nofollow"
       />
 
@@ -364,7 +364,7 @@ const CreateStream: React.FC = () => {
             </p>
           </div>
           <button
-            onClick={() => void navigate("/workforce")}
+            onClick={() => void navigate("/employer/workforce")}
             className="shrink-0 rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2 text-[13px] font-semibold text-white hover:bg-white/[0.08] transition-colors"
           >
             Cancel
@@ -463,7 +463,7 @@ const CreateStream: React.FC = () => {
                   wallets.
                 </p>
                 <button
-                  onClick={() => void navigate("/workforce")}
+                  onClick={() => void navigate("/employer/workforce")}
                   className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2 text-[13px] font-semibold text-white hover:bg-white/[0.08] transition-colors"
                 >
                   Go to Workforce

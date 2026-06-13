@@ -177,7 +177,7 @@ const StreamComparison: React.FC = () => {
                   variant="secondary"
                   size="sm"
                   onClick={() => {
-                    void navigate("/dashboard");
+                    void navigate("/employer/dashboard");
                   }}
                 >
                   Back to dashboard
@@ -186,7 +186,7 @@ const StreamComparison: React.FC = () => {
                   variant="primary"
                   size="sm"
                   onClick={() => {
-                    void navigate("/create-stream");
+                    void navigate("/employer/create-stream");
                   }}
                 >
                   Create stream
@@ -350,7 +350,7 @@ const StreamComparison: React.FC = () => {
                 </div>
                 <Link
                   className="text-sm font-semibold text-[#facc15] underline-offset-4 hover:underline"
-                  to="/analytics"
+                  to="/employer/analytics"
                 >
                   Open full analytics
                 </Link>

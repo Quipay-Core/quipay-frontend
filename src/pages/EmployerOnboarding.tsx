@@ -307,7 +307,7 @@ export default function EmployerOnboarding() {
           </div>
           <button
             onClick={() => {
-              void navigate("/dashboard");
+              void navigate("/employer/dashboard");
             }}
             className="w-full bg-yellow-400 hover:bg-yellow-300 text-black text-sm font-bold rounded-2xl py-[15px] transition-all duration-150 active:scale-[0.98]"
           >

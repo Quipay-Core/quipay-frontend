@@ -92,7 +92,7 @@ const AddressBook: React.FC = () => {
       <SeoHelmet
         title="Address Book | Quipay"
         description="Manage your worker contacts and favorites for quick stream creation."
-        path="/address-book"
+        path="/employer/address-book"
         imagePath="/og-image.png"
       />
 

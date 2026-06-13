@@ -1053,7 +1053,7 @@ const WorkerDashboard: React.FC = () => {
       <SeoHelmet
         title="My Earnings · Quipay"
         description="Your real-time earnings on Quipay"
-        path="/worker"
+        path="/employee/dashboard"
         robots="noindex,nofollow"
       />
 

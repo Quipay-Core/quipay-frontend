@@ -3,41 +3,48 @@ import { isWorkerRegistered } from "../contracts/workforce_registry";
 import { getStreamsByEmployer } from "../contracts/payroll_stream";
 
 /**
- * Role is determined entirely from on-chain state — no localStorage.
+ * Role is determined entirely from on-chain state.
+ * A wallet can hold BOTH roles simultaneously.
  *
- * worker   = address is registered in WorkforceRegistry
- * employer = address has created at least one stream via PayrollStream
- * unknown  = brand-new user, no on-chain history yet
+ * employer = has created at least one stream via PayrollStream
+ * worker   = registered in WorkforceRegistry
  *
- * Cached in localStorage for 5 minutes to avoid repeated RPC calls,
- * but the source of truth is always the contracts.
+ * Cached in localStorage (v3) for 5 minutes.
+ * v3 shape: { roles: ActiveRole[], ts: number }
+ * (v2 stored a single role string — key is different so old entries won't conflict)
  */
 
-export type UserRole = "employer" | "worker" | "unknown";
+export type ActiveRole = "employer" | "worker";
 
-const CACHE_TTL = 5 * 60 * 1000; // 5 min
-const key = (addr: string) => `quipay-role-v2-${addr}`;
+const CACHE_TTL = 5 * 60 * 1000;
+const cacheKey = (addr: string) => `quipay-role-v3-${addr}`;
 
-function readCache(addr: string): UserRole | null {
+function readCache(addr: string): ActiveRole[] | null {
   try {
-    const raw = localStorage.getItem(key(addr));
+    const raw = localStorage.getItem(cacheKey(addr));
     if (!raw) return null;
-    const { role, ts } = JSON.parse(raw) as { role: UserRole; ts: number };
+    const { roles, ts } = JSON.parse(raw) as {
+      roles: ActiveRole[];
+      ts: number;
+    };
     if (Date.now() - ts > CACHE_TTL) {
-      localStorage.removeItem(key(addr));
+      localStorage.removeItem(cacheKey(addr));
       return null;
     }
-    // Only cache confirmed roles — never cache "unknown"
-    return role === "unknown" ? null : role;
+    if (!Array.isArray(roles) || roles.length === 0) return null;
+    return roles;
   } catch {
     return null;
   }
 }
 
-function writeCache(addr: string, role: UserRole) {
-  if (role === "unknown") return; // don't cache — re-check next visit
+function writeCache(addr: string, roles: ActiveRole[]) {
+  if (roles.length === 0) return;
   try {
-    localStorage.setItem(key(addr), JSON.stringify({ role, ts: Date.now() }));
+    localStorage.setItem(
+      cacheKey(addr),
+      JSON.stringify({ roles, ts: Date.now() }),
+    );
   } catch {
     /* storage unavailable */
   }
@@ -45,7 +52,7 @@ function writeCache(addr: string, role: UserRole) {
 
 export function clearRoleCache(addr: string) {
   try {
-    localStorage.removeItem(key(addr));
+    localStorage.removeItem(cacheKey(addr));
   } catch {
     /* */
   }
@@ -54,43 +61,41 @@ export function clearRoleCache(addr: string) {
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useRoleDetect(address: string | undefined) {
-  const [role, setRole] = useState<UserRole>("unknown");
+  const [roles, setRoles] = useState<ActiveRole[]>([]);
   const [isDetecting, setIsDetecting] = useState(false);
 
   useEffect(() => {
     if (!address) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setRole("unknown");
+      setRoles([]);
       return;
     }
 
     const cached = readCache(address);
     if (cached) {
-      setRole(cached);
+      setRoles(cached);
       return;
     }
 
     setIsDetecting(true);
 
     void Promise.all([
-      // Worker check: are they in the WorkforceRegistry?
       isWorkerRegistered(address, address).catch(() => false),
-      // Employer check: have they created any streams?
       getStreamsByEmployer(address, 0, 1).catch(() => ({
         streams: [],
         total: 0,
       })),
     ])
       .then(([isWorker, employerPage]) => {
+        const page = employerPage as { total?: number; streams?: unknown[] };
         const hasStreams =
-          ((employerPage as any)?.total || 0) > 0 || ((employerPage as any)?.streams?.length || 0) > 0;
+          (page?.total || 0) > 0 || (page?.streams?.length || 0) > 0;
 
-        let detected: UserRole;
-        if (isWorker) detected = "worker";
-        else if (hasStreams) detected = "employer";
-        else detected = "unknown"; // new user
+        const detected: ActiveRole[] = [];
+        if (isWorker) detected.push("worker");
+        if (hasStreams) detected.push("employer");
 
-        setRole(detected);
+        setRoles(detected);
         writeCache(address, detected);
       })
       .finally(() => {
@@ -98,16 +103,20 @@ export function useRoleDetect(address: string | undefined) {
       });
   }, [address]);
 
-  const forceRole = (r: UserRole) => {
-    if (address) writeCache(address, r);
-    setRole(r);
+  // Add a role immediately (e.g. after user selects role during onboarding).
+  const addRole = (role: ActiveRole) => {
+    setRoles((prev) => {
+      const next = prev.includes(role) ? prev : [...prev, role];
+      if (address) writeCache(address, next);
+      return next;
+    });
   };
 
-  const resetRole = () => {
+  const resetRoles = () => {
     if (address) clearRoleCache(address);
-    setRole("unknown");
+    setRoles([]);
     setIsDetecting(false);
   };
 
-  return { role, isDetecting, forceRole, resetRole };
+  return { roles, isDetecting, addRole, resetRoles };
 }

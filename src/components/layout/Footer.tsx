@@ -7,12 +7,12 @@ const Footer: React.FC = () => {
     {
       heading: "Product",
       links: [
-        { label: "Dashboard", to: "/dashboard" },
-        { label: "Payroll", to: "/payroll" },
-        { label: "Treasury", to: "/treasury-management" },
-        { label: "Workforce", to: "/workforce" },
-        { label: "Analytics", to: "/analytics" },
-        { label: "Governance", to: "/governance" },
+        { label: "Dashboard", to: "/employer/dashboard" },
+        { label: "Payroll", to: "/employer/payroll" },
+        { label: "Treasury", to: "/employer/treasury" },
+        { label: "Workforce", to: "/employer/workforce" },
+        { label: "Analytics", to: "/employer/analytics" },
+        { label: "Governance", to: "/employer/governance" },
       ],
     },
     {

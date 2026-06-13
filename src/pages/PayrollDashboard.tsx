@@ -223,7 +223,7 @@ export default function PayrollDashboard() {
             here.
           </p>
           <button
-            onClick={() => void navigate("/create-stream")}
+            onClick={() => void navigate("/employer/create-stream")}
             className="rounded-xl px-6 py-3 text-[14px] font-bold text-black transition-all hover:opacity-90"
             style={{ backgroundColor: "#facc15" }}
           >
@@ -247,7 +247,7 @@ export default function PayrollDashboard() {
           </p>
         </div>
         <button
-          onClick={() => void navigate("/create-stream")}
+          onClick={() => void navigate("/employer/create-stream")}
           className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-bold text-black transition-all hover:opacity-90"
           style={{ backgroundColor: "#facc15" }}
         >

@@ -98,7 +98,7 @@ const GovernanceOverview: React.FC = () => {
       <SeoHelmet
         title="Governance · Quipay"
         description="Vault security and governance"
-        path="/governance"
+        path="/employer/governance"
         robots="noindex,nofollow"
       />
 
