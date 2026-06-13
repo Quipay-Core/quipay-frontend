@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
-import { kit } from "../util/wallet";
+import { connectWithWallet } from "../util/wallet";
 import { useWallet } from "../hooks/useWallet";
 import { getStreamsByWorker, getStreamById } from "../contracts/payroll_stream";
 import { formatUsdc } from "../contracts/util";
@@ -243,7 +243,7 @@ export default function JoinPage() {
             </div>
 
             <button
-              onClick={() => void kit.authModal()}
+              onClick={() => void connectWithWallet("freighter")}
               className="w-full rounded-2xl py-4 text-[15px] font-bold text-black transition-all hover:opacity-90 active:scale-[0.98]"
               style={{ backgroundColor: "#facc15" }}
             >

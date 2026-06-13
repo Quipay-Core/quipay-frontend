@@ -29,6 +29,24 @@ StellarWalletsKit.init({
 export const kit = StellarWalletsKit;
 export { KitEventType } from "@creit-tech/stellar-wallets-kit";
 
+export interface WalletOption {
+  id: string;
+  name: string;
+  icon: string;
+  isAvailable: boolean;
+  url: string;
+}
+
+export async function getWalletOptions(): Promise<WalletOption[]> {
+  return StellarWalletsKit.refreshSupportedWallets();
+}
+
+export async function connectWithWallet(id: string): Promise<string> {
+  StellarWalletsKit.setWallet(id);
+  const { address } = await StellarWalletsKit.fetchAddress();
+  return address;
+}
+
 // ─── Balance fetching via Horizon ─────────────────────────────────────────────
 
 interface HorizonBalance {
