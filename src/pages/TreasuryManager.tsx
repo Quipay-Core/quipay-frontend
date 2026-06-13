@@ -1,45 +1,30 @@
 import React, { useState, useEffect } from "react";
-import { createPublicClient, http } from "viem";
 import { useNavigate } from "react-router-dom";
 import { useWallet } from "../hooks/useWallet";
 import {
   getStreamsByEmployer,
   type ContractStream,
+  PAYROLL_STREAM_ADDRESS,
 } from "../contracts/payroll_stream";
 import {
-  arcTestnet,
-  ARC_USDC_ADDRESS,
   formatUsdc,
   network,
+  USDC_DECIMALS,
+  USDC_ISSUER,
 } from "../contracts/util";
-import { PAYROLL_STREAM_ADDRESS } from "../contracts/payroll_stream";
+import { fetchBalances } from "../util/wallet";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const ERC20_BALANCE_ABI = [
-  {
-    type: "function",
-    name: "balanceOf",
-    inputs: [{ name: "account", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }],
-    stateMutability: "view",
-  },
-] as const;
-
-function getClient() {
-  return createPublicClient({ chain: arcTestnet, transport: http() });
-}
+const STROOP = 10 ** USDC_DECIMALS;
 
 async function fetchUsdcBalance(address: string): Promise<bigint> {
   try {
-    const client = getClient();
-    const result = await client.readContract({
-      address: ARC_USDC_ADDRESS,
-      abi: ERC20_BALANCE_ABI,
-      functionName: "balanceOf",
-      args: [address as `0x${string}`],
-    });
-    return result;
+    const balances = await fetchBalances(address);
+    const raw = balances["USDC"]?.balance ?? "0";
+    const [whole = "0", frac = ""] = raw.split(".");
+    const fracPadded = frac.padEnd(USDC_DECIMALS, "0").slice(0, USDC_DECIMALS);
+    return BigInt(whole) * BigInt(STROOP) + BigInt(fracPadded || "0");
   } catch {
     return 0n;
   }
@@ -395,7 +380,7 @@ const TreasuryManager: React.FC = () => {
             </div>
             <div className="flex items-center gap-4">
               <a
-                href={`${network.explorerUrl}/address/${ARC_USDC_ADDRESS}`}
+                href={`${network.explorerUrl}/account/${USDC_ISSUER}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-[11px] text-neutral-600 hover:text-yellow-400 transition-colors"

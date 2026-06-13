@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useRole } from "../context/RoleContext";
 import type { ActiveView } from "../context/RoleContext";
 import type { ActiveRole } from "../hooks/useRoleDetect";
+import { useWallet } from "../hooks/useWallet";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -10,6 +11,7 @@ export default function SelectRole() {
   const navigate = useNavigate();
   const { roles, addRole, setActiveView } = useRole();
   const [loading, setLoading] = useState(false);
+  const { address: walletAddress } = useWallet();
 
   async function choose(picked: ActiveRole) {
     setLoading(true);
@@ -19,7 +21,7 @@ export default function SelectRole() {
 
     if (picked === "employer") {
       try {
-        const address = window.ethereum?.selectedAddress ?? "";
+        const address = walletAddress ?? "";
         const res = await fetch(`${API_BASE}/api/employers/status`, {
           credentials: "include",
           headers: {

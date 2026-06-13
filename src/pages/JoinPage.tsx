@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
-import { useAppKit } from "@reown/appkit/react";
+import { kit } from "../util/wallet";
 import { useWallet } from "../hooks/useWallet";
 import { getStreamsByWorker, getStreamById } from "../contracts/payroll_stream";
 import { formatUsdc } from "../contracts/util";
@@ -18,7 +18,7 @@ function StatusBadge({ status }: { status: number }) {
         Streaming
       </span>
     );
-  if (status === 3)
+  if (status === 4)
     return (
       <span className="rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-yellow-400/10 text-yellow-400 border border-yellow-400/20">
         Paused
@@ -41,31 +41,31 @@ interface StreamRow {
 }
 
 type PageState =
-  | "idle" // not connected
-  | "loading" // fetching streams
-  | "has_streams" // connected + streams found
-  | "no_streams" // connected + no streams yet
-  | "register_form" // filling in name/role
-  | "registered"; // registration submitted
+  | "idle"
+  | "loading"
+  | "has_streams"
+  | "no_streams"
+  | "register_form"
+  | "registered";
+
+// Stellar address: G followed by 55 base32 chars [A-Z2-7]
+const STELLAR_ADDR_RE = /^G[A-Z2-7]{55}$/;
 
 export default function JoinPage() {
   const [params] = useSearchParams();
   const employerParam = params.get("employer") ?? "";
   const { address } = useWallet();
-  const { open } = useAppKit();
 
   const [streams, setStreams] = useState<StreamRow[]>([]);
   const [pageState, setPageState] = useState<PageState>("idle");
 
-  // Registration form
   const [fullName, setFullName] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [registering, setRegistering] = useState(false);
   const [registerError, setRegisterError] = useState<string | null>(null);
 
-  const isValidAddress = /^0x[0-9a-fA-F]{40}$/.test(employerParam);
+  const isValidAddress = STELLAR_ADDR_RE.test(employerParam);
 
-  // Fetch streams when wallet connects
   useEffect(() => {
     const run = async () => {
       if (!address || !isValidAddress) {
@@ -78,12 +78,10 @@ export default function JoinPage() {
         const all = await Promise.all(
           ids.map(async (id) => {
             const s = await getStreamById(id);
-            return s && s.employer.toLowerCase() === employerParam.toLowerCase()
-              ? { id, ...s }
-              : null;
+            return s && s.employer === employerParam ? { id, ...s } : null;
           }),
         );
-        const found = all.filter((s): s is StreamRow => !!s);
+        const found = all.filter(Boolean) as StreamRow[];
         setStreams(found);
         setPageState(found.length > 0 ? "has_streams" : "no_streams");
       } catch {
@@ -200,12 +198,12 @@ export default function JoinPage() {
             </div>
           </div>
           <a
-            href={`https://testnet.arcscan.app/address/${employerParam}`}
+            href={`https://stellar.expert/explorer/testnet/account/${employerParam}`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-[12px] text-yellow-400 hover:underline"
           >
-            ArcScan ↗
+            Explorer ↗
           </a>
         </div>
 
@@ -245,14 +243,14 @@ export default function JoinPage() {
             </div>
 
             <button
-              onClick={() => void open()}
+              onClick={() => void kit.authModal()}
               className="w-full rounded-2xl py-4 text-[15px] font-bold text-black transition-all hover:opacity-90 active:scale-[0.98]"
               style={{ backgroundColor: "#facc15" }}
             >
               Connect wallet to continue
             </button>
             <p className="mt-3 text-center text-[12px] text-neutral-600">
-              Works with MetaMask, Coinbase Wallet, or any WalletConnect app
+              Works with Freighter, XBULL, or any Stellar wallet
             </p>
           </>
         )}

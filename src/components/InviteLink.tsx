@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useWallet } from "../hooks/useWallet";
 
 export default function InviteLink() {

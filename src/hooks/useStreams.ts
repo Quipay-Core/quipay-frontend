@@ -8,79 +8,55 @@ import {
 } from "../contracts/payroll_stream";
 import { getCache, setCache } from "../services/offlineService";
 
-/**
- * Normalised view of a single on-chain payroll stream for a worker.
- * All monetary values are in USDC units (6 decimal places, not Stellar stroops).
- */
 export interface WorkerStream {
-  /** On-chain stream ID (stringified `u64`). */
   id: string;
-  /** Display name for the employer (currently mirrors `employerAddress`). */
   employerName: string;
-  /** Stellar account ID of the employer who created this stream. */
   employerAddress: string;
-  /** Accrual rate in token units per second (= on-chain `rate` / 10^7). */
   flowRate: number;
-  /** Token symbol, e.g. `"USDC"` or `"XLM"`. */
   tokenSymbol: string;
-  /** Stream start time as a Unix timestamp in seconds. */
   startTime: number;
-  /** Stream end time as a Unix timestamp in seconds. */
   endTime: number;
-  /** Cliff unlock time as a Unix timestamp in seconds. No withdrawals before this point. */
   cliffTime: number;
-  /** Total allocated amount in token units (= on-chain `total_amount` / 10^7). */
   totalAmount: number;
-  /** Amount already withdrawn in token units (= on-chain `withdrawn_amount` / 10^7). */
   claimedAmount: number;
-  /** `0` = Active, `1` = Canceled, `2` = Completed (mirrors on-chain `StreamStatus` enum). */
   status: number;
-  /** IPFS CID of the payroll proof — only present for completed streams. */
   proofCid?: string;
-  /** Public HTTPS gateway URL for the proof — only present for completed streams. */
   proofGatewayUrl?: string;
 }
 
-/** A single historical withdrawal event emitted by the payroll stream contract. */
 export interface WithdrawalRecord {
-  /** Transaction hash (used as a unique record identifier). */
   id: string;
-  /** ID of the stream this withdrawal belongs to. */
   streamId: string;
-  /** Withdrawn amount formatted to 7 decimal places (token units). */
   amount: string;
-  /** Token symbol, e.g. `"USDC"`. */
   tokenSymbol: string;
-  /** Human-readable date string via `Date.toLocaleString()`. */
   date: string;
-  /** Stellar transaction hash for the withdrawal. */
   txHash: string;
 }
 
-/** ARC USDC uses 6 decimal places (1 USDC = 1_000_000 units). */
-const USDC_DECIMALS = 1e6; // ARC USDC: 6 decimals, NOT 7 like Stellar stroops
+// Stellar USDC: 7 decimal places (10^7 stroops = 1 USDC)
+const USDC_UNIT = 1e7;
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, "");
 const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ?? "";
 
 const _employerNameCache = new Map<string, string>();
 
-async function resolveEmployerName(evmAddress: string): Promise<string> {
-  if (_employerNameCache.has(evmAddress)) {
-    return _employerNameCache.get(evmAddress)!;
+async function resolveEmployerName(address: string): Promise<string> {
+  if (_employerNameCache.has(address)) {
+    return _employerNameCache.get(address)!;
   }
   try {
     const res = await fetch(
-      `${API_BASE}/api/employers/by-address?address=${encodeURIComponent(evmAddress)}`,
+      `${API_BASE}/api/employers/by-address?address=${encodeURIComponent(address)}`,
     );
     const data = (await res.json()) as {
       employer: { business_name: string } | null;
     };
-    const name = data.employer?.business_name ?? evmAddress;
-    _employerNameCache.set(evmAddress, name);
+    const name = data.employer?.business_name ?? address;
+    _employerNameCache.set(address, name);
     return name;
   } catch {
-    return evmAddress;
+    return address;
   }
 }
 
@@ -91,34 +67,12 @@ const fetchProof = async (
   try {
     const res = await fetch(`${BACKEND_URL}/proofs/${streamId}`);
     if (!res.ok) return null;
-    const data = (await res.json()) as { cid: string; gatewayUrl: string };
-    return data;
+    return (await res.json()) as { cid: string; gatewayUrl: string };
   } catch {
     return null;
   }
 };
 
-/**
- * Fetches and subscribes to all payroll streams for a given worker.
- *
- * On mount (and whenever `workerAddress` changes or `refetch` is called) the
- * hook queries the on-chain payroll stream contract for every stream ID
- * associated with the worker, resolves each stream's token symbol, and for
- * completed streams also fetches the IPFS proof from the backend.
- *
- * @param workerAddress - Stellar account ID of the worker, or `undefined` while
- *   the wallet is not yet connected. Passing `undefined` resets all state and
- *   skips the fetch.
- * @returns An object containing the resolved streams, withdrawal history,
- *   loading/error state, and a `refetch` callback to trigger a manual reload.
- *
- * @throws Never — errors are caught internally and exposed via the `error` field.
- *
- * @example
- * ```tsx
- * const { streams, isLoading, error, refetch } = useStreams(walletAddress);
- * ```
- */
 export const useStreams = (workerAddress: string | undefined) => {
   const [streams, setStreams] = useState<WorkerStream[]>([]);
   const [withdrawalHistory, setWithdrawalHistory] = useState<
@@ -136,8 +90,11 @@ export const useStreams = (workerAddress: string | undefined) => {
     if (!workerAddress) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setStreams([]);
+
       setWithdrawalHistory([]);
+
       setIsLoading(false);
+
       setError(null);
       return;
     }
@@ -179,20 +136,22 @@ export const useStreams = (workerAddress: string | undefined) => {
                   workerAddress,
                   s.token,
                 );
-                const isCompleted = s.status === 2;
+                const isCompleted = s.status === 3;
                 const proof = isCompleted ? await fetchProof(streamId) : null;
                 const employerName = await resolveEmployerName(s.employer);
                 return {
                   id: streamId,
                   employerName,
                   employerAddress: s.employer,
-                  flowRate: Number(s.rate) / USDC_DECIMALS,
+                  flowRate: Number(s.rate ?? s.ratePerSecond) / USDC_UNIT,
                   tokenSymbol,
-                  startTime: Number(s.start_ts),
-                  endTime: Number(s.end_ts),
-                  cliffTime: Number(s.cliff_ts),
-                  totalAmount: Number(s.total_amount) / USDC_DECIMALS,
-                  claimedAmount: Number(s.withdrawn_amount) / USDC_DECIMALS,
+                  startTime: Number(s.start_ts ?? s.startTs),
+                  endTime: Number(s.end_ts ?? s.endTs),
+                  cliffTime: Number(s.cliff_ts ?? s.cliffTs),
+                  totalAmount:
+                    Number(s.total_amount ?? s.totalAmount) / USDC_UNIT,
+                  claimedAmount:
+                    Number(s.withdrawn_amount ?? s.withdrawnAmount) / USDC_UNIT,
                   status: s.status,
                   proofCid: proof?.cid,
                   proofGatewayUrl: proof?.gatewayUrl,
@@ -207,14 +166,11 @@ export const useStreams = (workerAddress: string | undefined) => {
 
         const history: WithdrawalRecord[] = await Promise.all(
           events.map(async (ev) => {
-            const tokenSymbol = await getTokenSymbol(
-              workerAddress,
-              ev.token as `0x${string}`,
-            );
+            const tokenSymbol = await getTokenSymbol(workerAddress, ev.token);
             return {
               id: ev.txHash,
               streamId: ev.streamId.toString(),
-              amount: (Number(ev.amount) / USDC_DECIMALS).toFixed(7),
+              amount: (Number(ev.amount) / USDC_UNIT).toFixed(7),
               tokenSymbol,
               date: new Date(ev.ledgerClosedAt).toLocaleString(),
               txHash: ev.txHash,
@@ -226,7 +182,6 @@ export const useStreams = (workerAddress: string | undefined) => {
         void setCache(`worker-streams-${workerAddress}`, workerStreams);
         void setCache(`withdrawal-history-${workerAddress}`, history);
       } catch (err) {
-        // Try cache on failure
         const cachedStreams = await getCache(`worker-streams-${workerAddress}`);
         const cachedHistory = await getCache(
           `withdrawal-history-${workerAddress}`,
@@ -235,7 +190,7 @@ export const useStreams = (workerAddress: string | undefined) => {
         if (cachedStreams || cachedHistory) {
           setStreams(cachedStreams || []);
           setWithdrawalHistory(cachedHistory || []);
-          setError(null); // Clear error if we have cached data
+          setError(null);
         } else {
           const message =
             err instanceof Error ? err.message : "Failed to load stream data";

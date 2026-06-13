@@ -9,8 +9,7 @@ import {
   getTokenSymbol,
   ContractStream,
 } from "../contracts/payroll_stream";
-
-/** ---------------- REQUEST DEDUP ---------------- */
+import { USDC_ISSUER } from "../contracts/util";
 
 type CacheEntry<T> = {
   promise: Promise<T>;
@@ -18,7 +17,7 @@ type CacheEntry<T> = {
 };
 
 const requestCache = new Map<string, CacheEntry<unknown>>();
-const TTL = 2000; // 2 seconds
+const TTL = 2000;
 
 async function dedupRequest<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const now = Date.now();
@@ -40,8 +39,8 @@ async function dedupRequest<T>(key: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Arc USDC uses 6 decimal places (ERC-20 standard). */
-const USDC_DIVISOR = 1e6;
+// Stellar USDC: 7 decimal places (10^7 stroops = 1 USDC)
+const USDC_DIVISOR = 1e7;
 
 export interface Stream {
   id: string;
@@ -73,12 +72,8 @@ export interface PayrollSummary {
   streams_active: number;
 }
 
-const ARC_USDC =
-  import.meta.env.VITE_USDC_ADDRESS ??
-  "0x3600000000000000000000000000000000000000";
-
 const DEFAULT_TOKENS = [
-  { token: ARC_USDC, tokenSymbol: "USDC", monthlyBurnRate: BigInt(0) },
+  { token: USDC_ISSUER, tokenSymbol: "USDC", monthlyBurnRate: BigInt(0) },
 ];
 
 export const usePayroll = (
@@ -132,8 +127,6 @@ export const usePayroll = (
   }, [employerAddress]);
 
   const fetchPayrollSummary = useCallback(async (address: string) => {
-    // Payroll summary comes from the backend analytics API.
-    // Skip silently when no backend URL is configured (testnet / frontend-only mode).
     const backendUrl = import.meta.env.PUBLIC_BACKEND_URL;
     if (!backendUrl) {
       setPayrollSummary(null);
@@ -181,7 +174,6 @@ export const usePayroll = (
             const streamId = String((options?.offset ?? 0) + index + 1);
             const tokenSymbol = await getTokenSymbol(address, s.token);
 
-            // Compute rate from totalAmount / duration (contract stores totalAmount, not ratePerSecond)
             const durationSecs = Number(s.endTs) - Number(s.startTs);
             const ratePerSec =
               durationSecs > 0
@@ -242,11 +234,7 @@ export const usePayroll = (
       setStreams((prev) =>
         prev.map((stream) =>
           stream.id === streamId
-            ? {
-                ...stream,
-                status,
-                pendingAction: action,
-              }
+            ? { ...stream, status, pendingAction: action }
             : stream,
         ),
       );
@@ -258,10 +246,7 @@ export const usePayroll = (
     setStreams((prev) =>
       prev.map((stream) =>
         stream.id === snapshot.id
-          ? {
-              ...snapshot,
-              pendingAction: undefined,
-            }
+          ? { ...snapshot, pendingAction: undefined }
           : stream,
       ),
     );
@@ -271,10 +256,7 @@ export const usePayroll = (
     setStreams((prev) =>
       prev.map((stream) =>
         stream.id === streamId
-          ? {
-              ...stream,
-              pendingAction: undefined,
-            }
+          ? { ...stream, pendingAction: undefined }
           : stream,
       ),
     );
@@ -291,8 +273,6 @@ export const usePayroll = (
   }, [employerAddress, fetchPayrollSummary, fetchStreams, fetchVaultData]);
 
   useEffect(() => {
-    // Only connect to WebSocket when a backend URL is explicitly configured.
-    // Without a backend the socket just floods the console with ERR_CONNECTION_REFUSED.
     const WS_URL = import.meta.env.PUBLIC_BACKEND_URL;
     if (!employerAddress || !WS_URL) return;
 
@@ -314,9 +294,13 @@ export const usePayroll = (
     if (!employerAddress) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setStreams([]);
+
       setPayrollSummary(null);
+
       setIsLoading(false);
+
       setError(null);
+
       setPayrollSummaryError(null);
       return;
     }

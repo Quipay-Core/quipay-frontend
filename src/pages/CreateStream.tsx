@@ -1,30 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useWriteContract } from "wagmi";
-import { createPublicClient, http } from "viem";
 import { useNotification } from "../hooks/useNotification";
 import { useWallet } from "../hooks/useWallet";
-import { PAYROLL_STREAM_ADDRESS } from "../contracts/payroll_stream";
-import { PAYROLL_STREAM_ABI } from "../contracts/abi/PayrollStream.abi";
-import { ARC_USDC_ADDRESS, arcTestnet, parseUsdc } from "../contracts/util";
+import {
+  buildBatchCreateStreamsTx,
+  submitAndAwaitTx,
+} from "../contracts/payroll_stream";
+import { parseUsdc, USDC_ISSUER } from "../contracts/util";
+import { signTransaction } from "../util/wallet";
 import { SeoHelmet } from "../components/seo/SeoHelmet";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
-
-const ERC20_APPROVE_ABI = [
-  {
-    type: "function",
-    name: "approve",
-    inputs: [
-      { name: "spender", type: "address" },
-      { name: "amount", type: "uint256" },
-    ],
-    outputs: [{ name: "", type: "bool" }],
-    stateMutability: "nonpayable",
-  },
-] as const;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,13 +27,7 @@ interface EmployeeRow {
   registered_at: string;
 }
 
-type TxStep =
-  | "idle"
-  | "approving"
-  | "approve-wait"
-  | "creating"
-  | "create-wait"
-  | "done";
+type TxStep = "idle" | "creating" | "create-wait" | "done";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -70,11 +52,10 @@ function getInitials(name: string, wallet: string): string {
 const CreateStream: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const preselectedWorker = searchParams.get("worker")?.toLowerCase() ?? null;
+  const preselectedWorker = searchParams.get("worker")?.toUpperCase() ?? null;
 
   const { address } = useWallet();
   const { addNotification } = useNotification();
-  const { writeContractAsync } = useWriteContract();
 
   // ── Workers ──────────────────────────────────────────────────────────────
 
@@ -122,7 +103,7 @@ const CreateStream: React.FC = () => {
         workers.forEach((w) => {
           if (next[w.worker_address] === undefined) {
             next[w.worker_address] = preselectedWorker
-              ? w.worker_address.toLowerCase() === preselectedWorker
+              ? w.worker_address.toUpperCase() === preselectedWorker
               : true;
           }
         });
@@ -193,56 +174,34 @@ const CreateStream: React.FC = () => {
     if (!address || !canSubmit) return;
     setTxError(null);
 
-    const totalUsdc = selectedWorkers.reduce(
-      (sum, w) => sum + parseUsdc(amounts[w.worker_address] ?? "0"),
-      0n,
-    );
-
-    const params = selectedWorkers.map((w) => ({
-      worker: w.worker_address,
-      token: ARC_USDC_ADDRESS,
-      totalAmount: parseUsdc(amounts[w.worker_address] ?? "0"),
-      startTs: BigInt(startTs),
-      endTs: BigInt(endTs),
-      cliffTs: BigInt(cliffTs),
-      metadataHash:
-        "0x0000000000000000000000000000000000000000000000000000000000000000",
-    }));
-
-    const client = createPublicClient({ chain: arcTestnet, transport: http() });
-
     try {
-      // Step 1 — Approve USDC
-      setTxStep("approving");
-      const approveHash = await writeContractAsync({
-        address: ARC_USDC_ADDRESS,
-        abi: ERC20_APPROVE_ABI,
-        functionName: "approve",
-        args: [PAYROLL_STREAM_ADDRESS, totalUsdc],
-      });
+      for (const w of selectedWorkers) {
+        const totalAmount = parseUsdc(amounts[w.worker_address] ?? "0");
+        const duration = BigInt(Math.max(1, endTs - startTs));
+        const ratePerSecond = totalAmount / duration;
 
-      setTxStep("approve-wait");
-      await client.waitForTransactionReceipt({ hash: approveHash });
+        setTxStep("creating");
+        const { preparedXdr } = await buildBatchCreateStreamsTx(address, [
+          {
+            worker: w.worker_address,
+            token: USDC_ISSUER,
+            ratePerSecond,
+            startTs,
+            endTs,
+            cliffTs,
+          },
+        ]);
 
-      // Step 2 — Create stream(s)
-      setTxStep("creating");
-      const createHash =
-        params.length === 1
-          ? await writeContractAsync({
-              address: PAYROLL_STREAM_ADDRESS,
-              abi: PAYROLL_STREAM_ABI,
-              functionName: "createStream",
-              args: [params[0]],
-            })
-          : await writeContractAsync({
-              address: PAYROLL_STREAM_ADDRESS,
-              abi: PAYROLL_STREAM_ABI,
-              functionName: "batchCreate",
-              args: [params],
-            });
+        if (!preparedXdr) {
+          throw new Error(
+            `Failed to build transaction for ${w.full_name || w.worker_address}`,
+          );
+        }
 
-      setTxStep("create-wait");
-      await client.waitForTransactionReceipt({ hash: createHash });
+        setTxStep("create-wait");
+        const { signedTxXdr } = await signTransaction(preparedXdr);
+        await submitAndAwaitTx(signedTxXdr);
+      }
 
       setTxStep("done");
       addNotification(
@@ -260,24 +219,14 @@ const CreateStream: React.FC = () => {
   // ── Overlay labels ────────────────────────────────────────────────────────
 
   const overlayTitle =
-    txStep === "approving"
-      ? "Approve USDC in your wallet"
-      : txStep === "approve-wait"
-        ? "Approving USDC…"
-        : txStep === "creating"
-          ? "Confirm stream creation"
-          : "Creating streams on Arc…";
+    txStep === "creating"
+      ? "Confirm in your Stellar wallet"
+      : "Creating streams on Stellar…";
 
   const overlaySub =
-    txStep === "approving"
-      ? `Approve ${totalUsdcFloat.toLocaleString()} USDC for the PayrollStream contract`
-      : txStep === "approve-wait"
-        ? "Waiting for approval to confirm on Arc"
-        : txStep === "creating"
-          ? `Review the ${selectedWorkers.length > 1 ? "batch " : ""}stream transaction in your wallet`
-          : `Confirming ${selectedWorkers.length} stream${selectedWorkers.length !== 1 ? "s" : ""} on Arc Testnet`;
-
-  const isApprovePhase = txStep === "approving" || txStep === "approve-wait";
+    txStep === "creating"
+      ? "Review and sign the stream transaction"
+      : `Confirming ${selectedWorkers.length} stream${selectedWorkers.length !== 1 ? "s" : ""} on Stellar Testnet`;
 
   // ── No wallet ─────────────────────────────────────────────────────────────
 
@@ -332,21 +281,10 @@ const CreateStream: React.FC = () => {
 
             {/* Step progress */}
             <div className="mt-5 flex items-center justify-center gap-2">
-              <div
-                className={`h-1.5 w-14 rounded-full transition-colors ${
-                  isApprovePhase ? "bg-yellow-400" : "bg-green-400"
-                }`}
-              />
-              <div
-                className={`h-1.5 w-14 rounded-full transition-colors ${
-                  !isApprovePhase ? "bg-yellow-400" : "bg-white/10"
-                }`}
-              />
+              <div className="h-1.5 w-28 rounded-full bg-yellow-400" />
             </div>
             <p className="mt-2 text-[10px] text-neutral-700">
-              {isApprovePhase
-                ? "Step 1 of 2 — Approve USDC"
-                : "Step 2 of 2 — Create Streams"}
+              Signing on Stellar…
             </p>
           </div>
         </div>
@@ -632,7 +570,7 @@ const CreateStream: React.FC = () => {
                       USDC
                     </span>
                     <span className="ml-auto font-mono text-[11px] text-neutral-700">
-                      Arc Testnet
+                      Stellar Testnet
                     </span>
                   </div>
                 </div>
@@ -774,8 +712,8 @@ const CreateStream: React.FC = () => {
               {/* Two-step hint */}
               <div className="mt-4 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
                 <p className="text-[11px] text-neutral-600 leading-relaxed">
-                  Two transactions: approve USDC, then create streams. USDC
-                  transfers directly into the contract at creation.
+                  One Stellar transaction per stream. Funds are held in the
+                  Soroban contract and streamed continuously to each worker.
                 </p>
               </div>
 

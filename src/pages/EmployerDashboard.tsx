@@ -1,38 +1,27 @@
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { createPublicClient, http } from "viem";
 import { SeoHelmet } from "../components/seo/SeoHelmet";
 import EmptyState from "../components/EmptyState";
 import { useWallet } from "../hooks/useWallet";
 import { usePayroll } from "../hooks/usePayroll";
-import { arcTestnet, ARC_USDC_ADDRESS, formatUsdc } from "../contracts/util";
+import { formatUsdc, USDC_DECIMALS } from "../contracts/util";
+import { fetchBalances } from "../util/wallet";
 import { StatTileSkeleton, SkeletonRow } from "../components/Loading";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
-// ─── USDC balance via viem ────────────────────────────────────────────────────
+// ─── USDC balance via Horizon ────────────────────────────────────────────────
 
-const ERC20_BALANCE_ABI = [
-  {
-    type: "function",
-    name: "balanceOf",
-    inputs: [{ name: "account", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }],
-    stateMutability: "view",
-  },
-] as const;
+const STROOP = 10 ** USDC_DECIMALS; // 10^7
 
 async function fetchUsdcBalance(address: string): Promise<bigint> {
   try {
-    const client = createPublicClient({ chain: arcTestnet, transport: http() });
-    const result = await client.readContract({
-      address: ARC_USDC_ADDRESS,
-      abi: ERC20_BALANCE_ABI,
-      functionName: "balanceOf",
-      args: [address as `0x${string}`],
-    });
-    return result;
+    const balances = await fetchBalances(address);
+    const raw = balances["USDC"]?.balance ?? "0";
+    const [whole = "0", frac = ""] = raw.split(".");
+    const fracPadded = frac.padEnd(USDC_DECIMALS, "0").slice(0, USDC_DECIMALS);
+    return BigInt(whole) * BigInt(STROOP) + BigInt(fracPadded || "0");
   } catch {
     return 0n;
   }

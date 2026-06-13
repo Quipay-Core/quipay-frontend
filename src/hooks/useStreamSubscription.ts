@@ -1,7 +1,8 @@
 /**
- * useStreamSubscription — ARC version.
- * Subscribes to Withdrawn events on the PayrollStream contract via viem.
- * Replaces the Soroban/Horizon event polling version.
+ * useStreamSubscription — Stellar/Soroban version.
+ * Subscribes to Withdrawn events on the PayrollStream contract.
+ * On Stellar testnet, events are polled via rpc.getEvents.
+ * The hook stays mounted but fires through the refetch mechanism in useStreams.
  */
 
 import { useCallback, useEffect, useRef } from "react";
@@ -9,22 +10,16 @@ import { useStreamEvent } from "./useSubscription";
 import { PAYROLL_STREAM_ADDRESS } from "../contracts/payroll_stream";
 import { USDC_DECIMALS } from "../contracts/util";
 
-/** ARC USDC uses 6 decimal places (NOT 7 like Stellar stroops). */
-const USDC_UNIT = 10 ** USDC_DECIMALS;
+const USDC_UNIT = 10 ** USDC_DECIMALS; // 10^7 for Stellar
 
 export interface StreamWithdrawalUpdate {
   streamId: string;
   amount: number;
 }
 
-/**
- * Subscribe to `Withdrawn` events from the PayrollStream contract on ARC.
- * Calls `onWithdrawal` whenever a withdrawal event is detected.
- */
 export function useStreamSubscription(
   onWithdrawal: (update: StreamWithdrawalUpdate) => void,
   refetch?: () => void,
-  _pollInterval = 5000,
 ) {
   const onWithdrawalRef = useRef(onWithdrawal);
   const refetchRef = useRef(refetch);
@@ -48,10 +43,7 @@ export function useStreamSubscription(
     [],
   );
 
-  const enabled = Boolean(
-    PAYROLL_STREAM_ADDRESS &&
-    PAYROLL_STREAM_ADDRESS !== "0x0000000000000000000000000000000000000000",
-  );
+  const enabled = Boolean(PAYROLL_STREAM_ADDRESS?.startsWith("C"));
 
   useStreamEvent<{ streamId?: bigint; worker?: string; amount?: bigint }>(
     "Withdrawn",
