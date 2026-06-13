@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { kit } from "../util/wallet";
+import { connectWallet, disconnectWallet } from "../util/wallet";
 import { useWallet } from "../hooks/useWallet";
 
 const truncate = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -23,14 +23,7 @@ export const WalletButton = () => {
   const [showModal, setShowModal] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
 
-  const {
-    address,
-    isPending,
-    balances,
-    connectionError,
-    clearError,
-    disconnect,
-  } = useWallet();
+  const { address, isPending, balances, connectionError } = useWallet();
 
   const usdc = useMemo(
     () => formatUsdc(balances?.USDC?.balance),
@@ -53,18 +46,13 @@ export const WalletButton = () => {
         <button
           type="button"
           aria-label={t("wallet.connect")}
-          onClick={() => {
-            clearError();
-            // authModal() shows the wallet picker and returns {address} on success.
-            // WalletProvider's STATE_UPDATED listener updates state automatically.
-            void kit.authModal().catch((err: unknown) => {
-              if (err instanceof Error) clearError();
-            });
-          }}
+          onClick={() => void connectWallet()}
           className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-transparent px-4 py-[7px] text-[13px] font-medium text-white/80 transition-all duration-150 hover:border-white/30 hover:bg-white/[0.05] hover:text-white"
         >
           <span className="h-2 w-2 rounded-full bg-yellow-400" />
-          {t("wallet.connect")}
+          {isPending
+            ? t("wallet.connecting", "Connecting...")
+            : t("wallet.connect")}
         </button>
         {connectionError && (
           <p className="text-right text-[11px] text-red-400">
@@ -149,7 +137,7 @@ export const WalletButton = () => {
                 disabled={disconnecting}
                 onClick={() => {
                   setDisconnecting(true);
-                  disconnect()
+                  disconnectWallet()
                     .finally(() => {
                       setDisconnecting(false);
                       setShowModal(false);

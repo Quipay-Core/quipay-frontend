@@ -1,44 +1,68 @@
-/**
- * wallet.ts — Stellar wallet utilities using @creit.tech/stellar-wallets-kit v2
- * https://developers.stellar.org/docs/tools/developer-tools/wallets
- */
-
-import { StellarWalletsKit } from "@creit.tech/stellar-wallets-kit/sdk";
-import { Networks } from "@creit.tech/stellar-wallets-kit";
-import { FreighterModule } from "@creit.tech/stellar-wallets-kit/modules/freighter";
-import { xBullModule } from "@creit.tech/stellar-wallets-kit/modules/xbull";
-import { AlbedoModule } from "@creit.tech/stellar-wallets-kit/modules/albedo";
-import { LobstrModule } from "@creit.tech/stellar-wallets-kit/modules/lobstr";
 import {
-  HORIZON_URL,
+  type ISupportedWallet,
+  StellarWalletsKit,
+  type WalletNetwork,
+  allowAllModules,
+} from "@creit.tech/stellar-wallets-kit";
+import {
   networkPassphrase,
+  HORIZON_URL,
   USDC_ISSUER,
   USDC_ASSET_CODE,
 } from "../contracts/util";
+import storage from "./storage";
+
+const kit: StellarWalletsKit = new StellarWalletsKit({
+  network: networkPassphrase as WalletNetwork,
+  modules: allowAllModules(),
+});
+
+export const connectWallet = async () => {
+  await kit.openModal({
+    modalTitle: "Connect to your wallet",
+    onWalletSelected: (option: ISupportedWallet) => {
+      const selectedId = option.id;
+      kit.setWallet(selectedId);
+
+      void kit.getAddress().then((address) => {
+        if (address.address) {
+          storage.setItem("walletId", selectedId);
+          storage.setItem("walletAddress", address.address);
+        } else {
+          storage.setItem("walletId", "");
+          storage.setItem("walletAddress", "");
+        }
+      });
+
+      if (selectedId === "freighter" || selectedId === "hot-wallet") {
+        void kit.getNetwork().then((network) => {
+          if (network.network && network.networkPassphrase) {
+            storage.setItem("walletNetwork", network.network);
+            storage.setItem("networkPassphrase", network.networkPassphrase);
+          } else {
+            storage.setItem("walletNetwork", "");
+            storage.setItem("networkPassphrase", "");
+          }
+        });
+      }
+    },
+  });
+};
+
+export const disconnectWallet = async () => {
+  await kit.disconnect();
+  storage.removeItem("walletId");
+  storage.removeItem("walletAddress");
+  storage.removeItem("walletNetwork");
+  storage.removeItem("networkPassphrase");
+};
+
+// ─── Balances ─────────────────────────────────────────────────────────────────
 
 export type MappedBalances = Record<
   string,
   { balance: string; assetCode: string }
 >;
-
-// ─── Kit initialization ───────────────────────────────────────────────────────
-// Registers all default Stellar wallets (Freighter, xBull, Albedo, Lobstr).
-// All StellarWalletsKit methods are static — export the class itself as `kit`.
-
-StellarWalletsKit.init({
-  modules: [
-    new FreighterModule(),
-    new xBullModule(),
-    new AlbedoModule(),
-    new LobstrModule(),
-  ],
-  network: Networks.TESTNET,
-});
-
-export const kit = StellarWalletsKit;
-export { KitEventType } from "@creit.tech/stellar-wallets-kit";
-
-// ─── Balance fetching via Horizon ─────────────────────────────────────────────
 
 interface HorizonBalance {
   asset_type: string;
@@ -47,7 +71,9 @@ interface HorizonBalance {
   balance: string;
 }
 
-export async function fetchBalances(address: string): Promise<MappedBalances> {
+export const fetchBalances = async (
+  address: string,
+): Promise<MappedBalances> => {
   if (!address || !address.startsWith("G")) return {};
   try {
     const res = await fetch(`${HORIZON_URL}/accounts/${address}`);
@@ -68,18 +94,18 @@ export async function fetchBalances(address: string): Promise<MappedBalances> {
   } catch {
     return {};
   }
-}
+};
 
 // ─── Transaction signing ──────────────────────────────────────────────────────
 
-export async function signTransaction(
+export const signTransaction = async (
   xdr: string,
   opts?: { networkPassphrase?: string },
-): Promise<{ signedTxXdr: string }> {
-  const { signedTxXdr } = await StellarWalletsKit.signTransaction(xdr, {
+): Promise<{ signedTxXdr: string }> => {
+  const { signedTxXdr } = await kit.signTransaction(xdr, {
     networkPassphrase: opts?.networkPassphrase ?? networkPassphrase,
   });
   return { signedTxXdr };
-}
+};
 
-export const wallet = { signTransaction };
+export const wallet = kit;
