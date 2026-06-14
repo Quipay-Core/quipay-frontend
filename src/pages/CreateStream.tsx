@@ -29,6 +29,8 @@ interface EmployeeRow {
 
 type TxStep = "idle" | "creating" | "create-wait" | "done";
 
+type StreamType = "fixed" | "capped" | "scheduled" | "milestone";
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function toUnixSec(d: string): number {
@@ -139,6 +141,9 @@ const CreateStream: React.FC = () => {
 
   // ── Stream config ─────────────────────────────────────────────────────────
 
+  const [streamType, setStreamType] = useState<StreamType>("fixed");
+  const [capAmount, setCapAmount] = useState("");
+  const [purpose, setPurpose] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [cliffDate, setCliffDate] = useState("");
@@ -295,10 +300,10 @@ const CreateStream: React.FC = () => {
         <div className="mb-8 flex items-start justify-between gap-4">
           <div>
             <h1 className="text-[22px] font-bold text-white tracking-tight">
-              Create Payment Streams
+              Create Payment Stream
             </h1>
             <p className="mt-1 text-[14px] text-neutral-500">
-              Select workers, set USDC amounts, and stream payroll on Arc.
+              Choose stream type, select workers, set amounts, and start streaming.
             </p>
           </div>
           <button
@@ -559,6 +564,74 @@ const CreateStream: React.FC = () => {
                 Stream Settings
               </p>
               <div className="flex flex-col gap-4">
+                {/* Stream Type */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-bold uppercase tracking-widest text-neutral-500">
+                    Stream Type
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      {
+                        key: "fixed" as StreamType,
+                        label: "Fixed Rate",
+                        desc: "Constant $/sec",
+                      },
+                      {
+                        key: "capped" as StreamType,
+                        label: "Capped",
+                        desc: "Max amount limit",
+                      },
+                      {
+                        key: "scheduled" as StreamType,
+                        label: "Scheduled",
+                        desc: "Recurring payments",
+                      },
+                      {
+                        key: "milestone" as StreamType,
+                        label: "Milestone",
+                        desc: "Manual releases",
+                      },
+                    ].map((type) => (
+                      <button
+                        key={type.key}
+                        onClick={() => setStreamType(type.key)}
+                        className={`rounded-xl border p-3 text-left transition-colors ${
+                          streamType === type.key
+                            ? "border-yellow-400/40 bg-yellow-400/[0.06]"
+                            : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12]"
+                        }`}
+                      >
+                        <p
+                          className={`text-[12px] font-bold ${
+                            streamType === type.key
+                              ? "text-yellow-400"
+                              : "text-white"
+                          }`}
+                        >
+                          {type.label}
+                        </p>
+                        <p className="text-[10px] text-neutral-600 mt-0.5">
+                          {type.desc}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Purpose */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-bold uppercase tracking-widest text-neutral-500">
+                    Purpose
+                  </label>
+                  <input
+                    type="text"
+                    value={purpose}
+                    onChange={(e) => setPurpose(e.target.value)}
+                    placeholder="e.g. Monthly salary, Rent, Project budget"
+                    className="w-full rounded-xl border border-white/[0.1] bg-black px-4 py-2.5 text-[13px] text-white placeholder:text-neutral-700 focus:border-yellow-400/40 focus:outline-none transition-colors"
+                  />
+                </div>
+
                 {/* Token — fixed USDC */}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-bold uppercase tracking-widest text-neutral-500">
@@ -624,6 +697,46 @@ const CreateStream: React.FC = () => {
                     className="w-full rounded-xl border border-white/[0.1] bg-black px-4 py-2.5 text-[13px] text-white focus:border-yellow-400/40 focus:outline-none [color-scheme:dark]"
                   />
                 </div>
+
+                {/* Cap amount (capped streams only) */}
+                {streamType === "capped" && (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[11px] font-bold uppercase tracking-widest text-neutral-500">
+                      Cap Amount (USDC) <span style={{ color: "#facc15" }}>*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={capAmount}
+                      onChange={(e) => setCapAmount(e.target.value)}
+                      placeholder="Maximum total payout"
+                      className="w-full rounded-xl border border-white/[0.1] bg-black px-4 py-2.5 text-[13px] text-white placeholder:text-neutral-700 focus:border-yellow-400/40 focus:outline-none transition-colors"
+                    />
+                    <p className="text-[10px] text-neutral-600">
+                      Stream stops when this amount is reached.
+                    </p>
+                  </div>
+                )}
+
+                {/* Info for scheduled/milestone */}
+                {streamType === "scheduled" && (
+                  <div className="rounded-xl border border-yellow-400/20 bg-yellow-400/[0.04] p-3">
+                    <p className="text-[11px] text-yellow-400/80">
+                      Scheduled streams create recurring payments at set intervals.
+                      Configure the schedule after creating the stream.
+                    </p>
+                  </div>
+                )}
+
+                {streamType === "milestone" && (
+                  <div className="rounded-xl border border-yellow-400/20 bg-yellow-400/[0.04] p-3">
+                    <p className="text-[11px] text-yellow-400/80">
+                      Milestone streams require manual approval for each payment release.
+                      Configure milestones after creating the stream.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -631,6 +744,26 @@ const CreateStream: React.FC = () => {
             <div className="rounded-2xl border border-white/[0.07] bg-[#0a0a0a] p-5">
               <p className="mb-4 text-[13px] font-bold text-white">Summary</p>
               <div className="flex flex-col gap-3">
+                <div className="flex justify-between">
+                  <span className="text-[13px] text-neutral-500">Type</span>
+                  <span className="text-[13px] font-semibold text-white capitalize">
+                    {streamType === "fixed"
+                      ? "Fixed Rate"
+                      : streamType === "capped"
+                        ? "Capped"
+                        : streamType === "scheduled"
+                          ? "Scheduled"
+                          : "Milestone"}
+                  </span>
+                </div>
+                {purpose && (
+                  <div className="flex justify-between">
+                    <span className="text-[13px] text-neutral-500">Purpose</span>
+                    <span className="text-[13px] font-semibold text-white truncate max-w-[160px]">
+                      {purpose}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-[13px] text-neutral-500">Workers</span>
                   <span className="text-[13px] font-semibold text-white">
