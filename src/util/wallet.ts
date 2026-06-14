@@ -2,8 +2,9 @@ import {
   type ISupportedWallet,
   StellarWalletsKit,
   type WalletNetwork,
-  allowAllModules,
 } from "@creit.tech/stellar-wallets-kit";
+import { FreighterModule } from "@creit.tech/stellar-wallets-kit/modules/freighter";
+import { xBullModule } from "@creit.tech/stellar-wallets-kit/modules/xbull";
 import {
   networkPassphrase,
   HORIZON_URL,
@@ -14,7 +15,7 @@ import storage from "./storage";
 
 const kit: StellarWalletsKit = new StellarWalletsKit({
   network: networkPassphrase as WalletNetwork,
-  modules: allowAllModules(),
+  modules: [new FreighterModule(), new xBullModule()],
 });
 
 export const connectWallet = async () => {
