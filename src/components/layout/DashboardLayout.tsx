@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useWallet } from "../../hooks/useWallet";
 import { useRole } from "../../context/RoleContext";
+import { useOrg } from "../../context/OrgContext";
 import { Suspense } from "react";
 import NotificationCenter from "../NotificationCenter";
 
@@ -133,6 +134,22 @@ const EMPLOYER_MAIN_NAV = [
     accent: true,
   },
   {
+    label: "Payrolls",
+    to: "/employer/payrolls",
+    icon: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        className="w-5 h-5 shrink-0"
+      >
+        <rect x="2" y="5" width="20" height="14" rx="2" />
+        <path d="M2 10h20" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
     label: "Treasury",
     to: "/employer/treasury",
     icon: (
@@ -162,6 +179,23 @@ const EMPLOYER_MAIN_NAV = [
           d="M4 20h16M4 20v-4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v4M8 12V8m8 4V8M12 12V4"
           strokeLinecap="round"
         />
+      </svg>
+    ),
+  },
+  {
+    label: "Team",
+    to: "/employer/team",
+    icon: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        className="w-5 h-5 shrink-0"
+      >
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" strokeLinecap="round" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" strokeLinecap="round" />
       </svg>
     ),
   },
@@ -472,6 +506,8 @@ function SidebarContent({
   setCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
   onDisconnect: () => void;
 }) {
+  const { orgs, activeOrg, setActiveOrg } = useOrg();
+
   return (
     <div className="flex h-full flex-col bg-[#050505]">
       {/* Logo */}
@@ -501,6 +537,37 @@ function SidebarContent({
           </span>
         )}
       </div>
+
+      {/* Org switcher (employer view only) */}
+      {view === "employer" && !collapsed && activeOrg && (
+        <div className="border-b border-white/[0.05] px-3 py-2.5">
+          {orgs.length > 1 ? (
+            <select
+              value={activeOrg.orgId}
+              onChange={(e) => {
+                const org = orgs.find((o) => o.orgId === e.target.value);
+                if (org) setActiveOrg(org);
+              }}
+              className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-white focus:border-yellow-400/50 focus:outline-none transition-colors"
+            >
+              {orgs.map((org) => (
+                <option key={org.orgId} value={org.orgId}>
+                  {org.businessName}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="truncate px-1 text-[12px] font-medium text-neutral-400">
+              {activeOrg.businessName}
+            </p>
+          )}
+          {activeOrg && (
+            <span className="mt-1 inline-block rounded-full bg-yellow-400/10 text-yellow-400 border border-yellow-400/20 px-1.5 py-0.5 text-[9px] font-bold uppercase">
+              {activeOrg.role}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Nav */}
       <div className="flex-1 px-2 py-3 overflow-y-auto scrollbar-none">

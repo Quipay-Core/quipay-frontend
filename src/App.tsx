@@ -40,6 +40,10 @@ const DashboardCustomization = lazy(
 );
 const StreamTemplates = lazy(() => import("./pages/StreamTemplates"));
 const StreamComparison = lazy(() => import("./pages/StellarOnlyStub"));
+const OrgMembers = lazy(() => import("./pages/OrgMembers"));
+const PayrollList = lazy(() => import("./pages/PayrollList"));
+const PayrollCreate = lazy(() => import("./pages/PayrollCreate"));
+const PayrollDetail = lazy(() => import("./pages/PayrollDetail"));
 
 // Employee pages
 const WorkerDashboard = lazy(() => import("./pages/WorkerDashboard"));
@@ -148,6 +152,10 @@ function App() {
             />
             <Route path="/employer/withdraw" element={<WithdrawPage />} />
             <Route path="/employer/settings" element={<Settings />} />
+            <Route path="/employer/team" element={<OrgMembers />} />
+            <Route path="/employer/payrolls" element={<PayrollList />} />
+            <Route path="/employer/payrolls/new" element={<PayrollCreate />} />
+            <Route path="/employer/payrolls/:id" element={<PayrollDetail />} />
           </Route>
 
           {/* ── Employee routes ── */}
