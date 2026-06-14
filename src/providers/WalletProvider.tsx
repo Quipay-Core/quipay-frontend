@@ -1,74 +1,59 @@
+/**
+ * WalletProvider — Stellar wallet state via @creit.tech/stellar-wallets-kit v2.
+ * Uses event-based listeners (StellarWalletsKit.on) instead of polling.
+ * https://developers.stellar.org/docs/tools/developer-tools/wallets
+ */
+
 import {
+  createContext,
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   useTransition,
 } from "react";
-import storage from "../util/storage";
 import {
-  wallet,
+  kit,
   fetchBalances,
   signTransaction,
-  type MappedBalances,
+  KitEventType,
 } from "../util/wallet";
-import { networkPassphrase as defaultPassphrase } from "../contracts/util";
-import { WalletContext, type WalletContextType } from "./WalletContext";
+import type { MappedBalances } from "../util/wallet";
+import { networkPassphrase } from "../contracts/util";
 
-export { WalletContext, type WalletContextType };
-
-interface WalletBehavior {
-  getAddressBehavior: "standard" | "popup-always";
-  supportsGetNetwork: boolean;
+export interface WalletContextType {
+  address?: string;
+  balances: MappedBalances;
+  isPending: boolean;
+  network?: string;
+  networkPassphrase?: string;
+  signTransaction: typeof signTransaction;
+  updateBalances: () => Promise<void>;
+  connectionError?: string;
+  clearError: () => void;
+  disconnect: () => Promise<void>;
+  accounts: string[];
+  switchAccount: (address: string) => void;
 }
 
-const DEFAULT_WALLET_BEHAVIOR: WalletBehavior = {
-  getAddressBehavior: "popup-always",
-  supportsGetNetwork: false,
-};
-
-const WALLET_BEHAVIORS: Record<string, WalletBehavior> = {
-  freighter: { getAddressBehavior: "standard", supportsGetNetwork: true },
-  "hot-wallet": {
-    getAddressBehavior: "popup-always",
-    supportsGetNetwork: true,
-  },
-  hana: { getAddressBehavior: "standard", supportsGetNetwork: false },
-  lobstr: { getAddressBehavior: "popup-always", supportsGetNetwork: false },
-  albedo: { getAddressBehavior: "popup-always", supportsGetNetwork: false },
-  xbull: { getAddressBehavior: "standard", supportsGetNetwork: false },
-  rabet: { getAddressBehavior: "standard", supportsGetNetwork: false },
-  klever: { getAddressBehavior: "popup-always", supportsGetNetwork: true },
-};
-
-function getWalletBehavior(walletId: string): WalletBehavior {
-  return WALLET_BEHAVIORS[walletId] ?? DEFAULT_WALLET_BEHAVIOR;
-}
-
-const POLL_INTERVAL = 1000;
+export const WalletContext = createContext<WalletContextType>({
+  isPending: true,
+  balances: {},
+  updateBalances: async () => {},
+  signTransaction,
+  clearError: () => {},
+  disconnect: async () => {},
+  accounts: [],
+  switchAccount: () => {},
+});
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [address, setAddress] = useState<string | undefined>();
   const [balances, setBalances] = useState<MappedBalances>({});
-  const [network, setNetwork] = useState<string | undefined>();
-  const [netPassphrase, setNetPassphrase] = useState<string | undefined>();
   const [connectionError, setConnectionError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
-  const popupLock = useRef(false);
 
   const clearError = useCallback(() => setConnectionError(undefined), []);
-
-  const nullify = useCallback(() => {
-    setAddress(undefined);
-    setNetwork(undefined);
-    setNetPassphrase(undefined);
-    setBalances({});
-    storage.setItem("walletId", "");
-    storage.setItem("walletAddress", "");
-    storage.setItem("walletNetwork", "");
-    storage.setItem("networkPassphrase", "");
-  }, []);
 
   const updateBalances = useCallback(async () => {
     if (!address) {
@@ -83,138 +68,51 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, [address]);
 
   useEffect(() => {
-    let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!address) {
-      setBalances({});
-      return;
-    }
-    fetchBalances(address)
-      .then((b) => {
-        if (!cancelled) setBalances(b);
-      })
-      .catch(() => {
-        if (!cancelled) setBalances({});
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [address]);
+    startTransition(() => {
+      void updateBalances();
+    });
+  }, [updateBalances]);
 
-  const fetchAddress = useCallback(
-    async (
-      walletId: string,
-      cachedAddress: string | null,
-    ): Promise<{ address: string }> => {
-      const behavior = getWalletBehavior(walletId);
-      if (behavior.getAddressBehavior === "popup-always" && cachedAddress) {
-        return { address: cachedAddress };
-      }
-      return wallet.getAddress();
-    },
-    [],
-  );
-
-  const fetchNetwork = useCallback(
-    async (
-      walletId: string,
-      cachedNetwork: string | null,
-      cachedPassphrase: string | null,
-    ): Promise<{ network: string; networkPassphrase: string }> => {
-      const behavior = getWalletBehavior(walletId);
-      if (!behavior.supportsGetNetwork) {
-        return {
-          network: cachedNetwork ?? "testnet",
-          networkPassphrase: cachedPassphrase ?? defaultPassphrase,
-        };
-      }
-      return wallet.getNetwork();
-    },
-    [],
-  );
-
-  const updateCurrentWalletState = useCallback(async () => {
-    const storedWalletId = storage.getItem("walletId");
-    const walletNetwork = storage.getItem("walletNetwork");
-    const walletAddr = storage.getItem("walletAddress");
-    const passphrase = storage.getItem("networkPassphrase");
-
-    if (!address && walletAddr && walletNetwork && passphrase) {
-      setAddress(walletAddr);
-      setNetwork(walletNetwork);
-      setNetPassphrase(passphrase);
-    }
-
-    if (!storedWalletId) {
-      nullify();
-      return;
-    }
-
-    if (popupLock.current) return;
-
-    try {
-      popupLock.current = true;
-      wallet.setWallet(storedWalletId);
-
-      const [addressResult, networkResult] = await Promise.all([
-        fetchAddress(storedWalletId, walletAddr),
-        fetchNetwork(storedWalletId, walletNetwork, passphrase),
-      ]);
-
-      if (!addressResult.address) {
-        storage.setItem("walletId", "");
-        return;
-      }
-
-      storage.setItem("walletAddress", addressResult.address);
-      storage.setItem("walletNetwork", networkResult.network);
-      storage.setItem("networkPassphrase", networkResult.networkPassphrase);
-      setAddress(addressResult.address);
-      setNetwork(networkResult.network);
-      setNetPassphrase(networkResult.networkPassphrase);
-    } catch (e) {
-      nullify();
-      setConnectionError(e instanceof Error ? e.message : "Wallet error");
-    } finally {
-      popupLock.current = false;
-    }
-  }, [address, nullify, fetchAddress, fetchNetwork]);
-
+  // Event-based address tracking — no polling needed.
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    let isMounted = true;
+    // Restore previously connected address on mount.
+    void kit
+      .getAddress()
+      .then(({ address: addr }) => setAddress(addr || undefined))
+      .catch(() => {});
 
-    const poll = async () => {
-      if (!isMounted) return;
-      await updateCurrentWalletState();
-      if (isMounted) timer = setTimeout(() => void poll(), POLL_INTERVAL);
-    };
+    // STATE_UPDATED fires when user connects or switches accounts.
+    const unsubUpdate = kit.on(KitEventType.STATE_UPDATED, (event) => {
+      setAddress(event.payload.address || undefined);
+    });
 
-    startTransition(async () => {
-      await updateCurrentWalletState();
-      if (isMounted) timer = setTimeout(() => void poll(), POLL_INTERVAL);
+    // DISCONNECT fires when user disconnects.
+    const unsubDisconnect = kit.on(KitEventType.DISCONNECT, () => {
+      setAddress(undefined);
+      setBalances({});
     });
 
     return () => {
-      isMounted = false;
-      clearTimeout(timer);
+      unsubUpdate();
+      unsubDisconnect();
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const disconnect = useCallback(async () => {
     try {
-      await wallet.disconnect();
-    } catch {
-      /* ignore */
+      await kit.disconnect();
+    } catch (e) {
+      setConnectionError(e instanceof Error ? e.message : "Disconnect failed");
     }
-    nullify();
-  }, [nullify]);
+    setAddress(undefined);
+    setBalances({});
+  }, []);
 
   const contextValue = useMemo<WalletContextType>(
     () => ({
       address,
-      network,
-      networkPassphrase: netPassphrase,
+      network: "Stellar Testnet",
+      networkPassphrase,
       balances,
       updateBalances,
       isPending,
@@ -227,8 +125,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }),
     [
       address,
-      network,
-      netPassphrase,
       balances,
       updateBalances,
       isPending,
