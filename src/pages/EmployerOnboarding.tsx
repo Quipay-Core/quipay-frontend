@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useWallet } from "../hooks/useWallet";
+import { buildCreateVaultTx } from "../contracts/vault_factory";
+import { signTransaction, submitAndAwaitTx } from "../contracts/payroll_stream";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -180,7 +182,8 @@ export default function EmployerOnboarding() {
   const { address } = useWallet();
   const navigate = useNavigate();
 
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [vaultStatus, setVaultStatus] = useState<"idle" | "deploying" | "done" | "skipped">("idle");
   const [form, setForm] = useState({
     businessName: "",
     registrationNumber: "",
@@ -222,6 +225,7 @@ export default function EmployerOnboarding() {
     setLoading(true);
     setError(null);
     try {
+      // Step 1: Backend onboarding
       const res = await fetch(`${API_BASE}/api/employers/onboard`, {
         method: "POST",
         headers: {
@@ -234,6 +238,40 @@ export default function EmployerOnboarding() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Onboarding failed.");
+
+      // Step 2: Deploy vault on-chain
+      setStep(3);
+      setVaultStatus("deploying");
+
+      try {
+        const { preparedXdr } = await buildCreateVaultTx(address);
+        const { signedTxXdr } = await signTransaction(preparedXdr);
+        const txHash = await submitAndAwaitTx(signedTxXdr);
+
+        // Step 3: Register vault address with backend
+        // The vault address is derived from the contract deployment
+        // For now, we register the tx hash as proof; the vault address
+        // will be resolved by the backend from the factory contract
+        await fetch(`${API_BASE}/api/employers/vault/register`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": address.toLowerCase(),
+            "x-user-role": "user",
+          },
+          body: JSON.stringify({
+            vaultAddress: txHash, // Will be replaced with actual vault address
+          }),
+        });
+
+        setVaultStatus("done");
+      } catch (vaultErr) {
+        // Vault creation failed, but onboarding succeeded
+        // User can create vault later from treasury page
+        console.warn("Vault creation failed:", vaultErr);
+        setVaultStatus("skipped");
+      }
+
       setResult(data as OnboardResult);
     } catch (err: unknown) {
       setError(
@@ -393,20 +431,29 @@ export default function EmployerOnboarding() {
             <div
               className={`h-[2.5px] rounded-full transition-all duration-300 ${step >= 2 ? "w-9 bg-yellow-400" : "w-5 bg-white/10"}`}
             />
+            <div
+              className={`h-[2.5px] rounded-full transition-all duration-300 ${step >= 3 ? "w-9 bg-yellow-400" : "w-5 bg-white/10"}`}
+            />
             <span className="text-neutral-600 text-[11px] font-medium uppercase tracking-widest ml-2">
-              {step} / 2
+              {step} / 3
             </span>
           </div>
 
           {/* Heading */}
           <div className="mb-6">
             <h2 className="text-white text-[1.65rem] font-bold tracking-tight leading-tight">
-              {step === 1 ? "Business details" : "Contact info"}
+              {step === 1
+                ? "Business details"
+                : step === 2
+                  ? "Contact info"
+                  : "Deploy treasury vault"}
             </h2>
             <p className="text-neutral-500 text-[13.5px] mt-1.5">
               {step === 1
                 ? "Tell us about your organisation."
-                : "Who should we reach for KYB updates?"}
+                : step === 2
+                  ? "Who should we reach for KYB updates?"
+                  : "Creating your secure on-chain treasury."}
             </p>
           </div>
 
@@ -561,6 +608,61 @@ export default function EmployerOnboarding() {
                 </button>
               </div>
             </form>
+          )}
+
+          {/* ── Step 3: Vault Deployment ── */}
+          {step === 3 && (
+            <div className="text-center py-8">
+              {vaultStatus === "deploying" && (
+                <>
+                  <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-yellow-400/10 ring-1 ring-yellow-400/20">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-yellow-400/30 border-t-yellow-400" />
+                  </div>
+                  <p className="text-[16px] font-bold text-white mb-2">
+                    Deploying your vault…
+                  </p>
+                  <p className="text-[13px] text-neutral-500">
+                    Please sign the transaction in your wallet.
+                  </p>
+                </>
+              )}
+              {vaultStatus === "done" && (
+                <>
+                  <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-green-500/10 ring-1 ring-green-500/20">
+                    <svg
+                      className="h-6 w-6 text-green-400"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </div>
+                  <p className="text-[16px] font-bold text-white mb-2">
+                    Vault deployed!
+                  </p>
+                  <p className="text-[13px] text-neutral-500">
+                    Your secure treasury is ready. You can now deposit funds and create streams.
+                  </p>
+                </>
+              )}
+              {vaultStatus === "skipped" && (
+                <>
+                  <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-yellow-400/10 ring-1 ring-yellow-400/20">
+                    <span className="text-2xl">⚠️</span>
+                  </div>
+                  <p className="text-[16px] font-bold text-white mb-2">
+                    Vault creation skipped
+                  </p>
+                  <p className="text-[13px] text-neutral-500">
+                    You can create your vault later from the Treasury page.
+                  </p>
+                </>
+              )}
+            </div>
           )}
 
           <p className="text-neutral-700 text-[11.5px] mt-7">

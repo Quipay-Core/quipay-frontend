@@ -12,6 +12,7 @@ import { useNotification } from "../hooks/useNotification";
 import { buildRegisterWorkerTx } from "../contracts/workforce_registry";
 import { buildWithdrawTx, submitAndAwaitTx } from "../contracts/payroll_stream";
 import { formatTokenAmount } from "../util/tokenDecimals";
+import { useStreamEscrow } from "../hooks/useStreamEscrow";
 import { StreamTimeline } from "../components/StreamTimeline";
 import CopyButton from "../components/CopyButton";
 import {
@@ -571,6 +572,9 @@ const StreamCard: React.FC<{
   const previousAvailableRef = useRef<number | null>(null);
   const nowMs = useSharedClockMs();
 
+  // Fetch on-chain escrow data
+  const { escrow } = useStreamEscrow(stream.id);
+
   useStreamSubscription((update) => {
     if (update.streamId === String(stream.id))
       setLastEventAmount(update.amount);
@@ -759,6 +763,35 @@ const StreamCard: React.FC<{
             </p>
           )}
         </div>
+
+        {/* On-chain escrow data */}
+        {escrow && (
+          <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-600 mb-2">
+              On-chain escrow
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <p className="text-[10px] text-neutral-600">Locked</p>
+                <p className="text-[13px] font-semibold text-white font-mono">
+                  {formatTokenAmount(Number(escrow.locked) / 1e7, stream.tokenSymbol, 2)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] text-neutral-600">Vested</p>
+                <p className="text-[13px] font-semibold text-green-400 font-mono">
+                  {formatTokenAmount(Number(escrow.vested) / 1e7, stream.tokenSymbol, 2)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] text-neutral-600">Available</p>
+                <p className="text-[13px] font-semibold font-mono" style={{ color: "#facc15" }}>
+                  {formatTokenAmount(Number(escrow.available) / 1e7, stream.tokenSymbol, 2)}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Last event */}
         {lastEventAmount !== null && (
