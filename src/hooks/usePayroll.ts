@@ -99,10 +99,39 @@ export const usePayroll = (
   const [fetchTick, setFetchTick] = useState(0);
 
   const fetchVaultData = useCallback(async () => {
+    if (!employerAddress) return;
+
     setIsVaultLoading(true);
     try {
-      const data = await dedupRequest("vaultData", () =>
-        getAllVaultData(DEFAULT_TOKENS, employerAddress ?? ""),
+      // First, get the employer's vault address from the backend
+      const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+      const vaultRes = await fetch(`${API_BASE}/api/employers/vault`, {
+        headers: {
+          "x-user-id": employerAddress,
+          "x-user-role": "user",
+        },
+      });
+
+      let vaultAddress = "";
+      if (vaultRes.ok) {
+        const vaultData = (await vaultRes.json()) as { vaultAddress?: string };
+        vaultAddress = vaultData.vaultAddress ?? "";
+      }
+
+      if (!vaultAddress) {
+        // No vault deployed yet
+        setVaultData([]);
+        setTreasuryBalances([]);
+        setTotalLiabilities("0");
+        return;
+      }
+
+      // Fetch real vault data from the on-chain contract
+      const tokenAddresses = DEFAULT_TOKENS.map((t) => t.token);
+      const tokenSymbols = DEFAULT_TOKENS.map((t) => t.tokenSymbol);
+
+      const data = await dedupRequest(`vaultData-${vaultAddress}`, () =>
+        getAllVaultData(vaultAddress, tokenAddresses, tokenSymbols),
       );
 
       setVaultData(data);

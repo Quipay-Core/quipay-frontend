@@ -13,6 +13,7 @@ import {
   USDC_ISSUER,
 } from "../contracts/util";
 import { fetchBalances } from "../util/wallet";
+import { getVaultInfo, type VaultInfo } from "../contracts/payroll_vault";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -129,12 +130,15 @@ const TreasuryManager: React.FC = () => {
   const navigate = useNavigate();
 
   const [walletUsdc, setWalletUsdc] = useState<bigint>(0n);
+  const [vaultInfo, setVaultInfo] = useState<VaultInfo | null>(null);
   const [streams, setStreams] = useState<
     Array<{ id: number; stream: ContractStream }>
   >([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+
+  const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
   useEffect(() => {
     if (!address) return;
@@ -151,6 +155,22 @@ const TreasuryManager: React.FC = () => {
         setWalletUsdc(bal);
         const paired = raw.map((s, i) => ({ id: i + 1, stream: s }));
         setStreams(paired);
+
+        // Fetch vault info
+        try {
+          const vaultRes = await fetch(`${API_BASE}/api/employers/vault`, {
+            headers: { "x-user-id": address, "x-user-role": "user" },
+          });
+          if (vaultRes.ok) {
+            const data = (await vaultRes.json()) as { vaultAddress?: string };
+            if (data.vaultAddress) {
+              const info = await getVaultInfo(data.vaultAddress, USDC_ISSUER);
+              setVaultInfo(info);
+            }
+          }
+        } catch {
+          // Vault not deployed yet — that's OK
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load data");
       } finally {
@@ -240,20 +260,22 @@ const TreasuryManager: React.FC = () => {
           <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
             {[
               {
+                label: "Vault balance",
+                value: vaultInfo ? `${fmtUsdc(vaultInfo.balance)} USDC` : "No vault",
+                accent: true,
+                sub: vaultInfo
+                  ? `${fmtUsdc(vaultInfo.available)} available`
+                  : "Deploy from onboarding",
+              },
+              {
                 label: "Wallet balance",
                 value: `${fmtUsdc(walletUsdc)} USDC`,
-                accent: true,
-                sub: "Available to create streams",
+                sub: "Personal wallet",
               },
               {
                 label: "Locked in streams",
                 value: `${fmtUsdc(totalLocked)} USDC`,
                 sub: `${activeStreams.length} active stream${activeStreams.length !== 1 ? "s" : ""}`,
-              },
-              {
-                label: "Total committed",
-                value: `${fmtUsdc(totalCommitted)} USDC`,
-                sub: "Across all streams ever",
               },
               {
                 label: "Paid to workers",
